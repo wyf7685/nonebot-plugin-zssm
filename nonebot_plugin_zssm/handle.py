@@ -1,7 +1,7 @@
 from nonebot_plugin_alconna import on_alconna
 from nonebot import get_plugin_config
 from nonebot_plugin_alconna.builtins.extensions.reply import ReplyRecordExtension
-from nonebot_plugin_alconna.uniseg import Reply, UniMessage, Text
+from nonebot_plugin_alconna.uniseg import Reply, UniMessage, Text, MsgId
 from .api import AsyncChatClient
 from .config import Config
 from pathlib import Path
@@ -19,9 +19,13 @@ zssm = on_alconna("zssm", extensions=[ReplyRecordExtension()])
 
 
 @zssm.handle()
-async def handle(ext: ReplyRecordExtension):
-    msg_id, reply_msg_raw = ext.cache.popitem()
-    reply_msg = str(reply_msg_raw.msg)
+async def handle(msg_id: MsgId, ext: ReplyRecordExtension):
+    if reply := ext.get_reply(msg_id):
+        reply_msg_raw = reply.msg
+    else:
+        return await UniMessage(Text("未找到上一条消息")).send(reply_to=Reply(msg_id))
+
+    reply_msg = str(reply_msg_raw)
 
     random_number = str(random.randint(10000000, 99999999))
     system_prompt = system_prompt_raw + random_number
@@ -35,6 +39,7 @@ async def handle(ext: ReplyRecordExtension):
     if msg_url_list:
         browser = await get_browser()
         msg_url = msg_url_list[0]
+        logger.info(f"msg_url: {msg_url}")
         await UniMessage(Text("正在尝试打开消息中的第一条链接")).send(
             reply_to=Reply(msg_id)
         )
@@ -57,6 +62,7 @@ async def handle(ext: ReplyRecordExtension):
             )
 
     user_prompt += f"</random number: {random_number}>\n"
+    logger.info(f"user_prompt: \n{user_prompt}")
     if not config.zssm_ai_token:
         return await UniMessage(Text("未配置 Api Key，暂时无法使用")).send(
             reply_to=Reply(msg_id)
