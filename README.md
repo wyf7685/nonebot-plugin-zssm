@@ -83,3 +83,8 @@ _✨ 这是什么？问一下！ ✨_
 | zssm | 无 | 否 | 回复 | 对着需要解释的东西回复一下 |
 
 ### 效果图
+
+![05f21be5fdf0221fe8f13e64342ed622](https://github.com/user-attachments/assets/68e806b6-895e-41dd-a08e-303b1a2abcb3)
+
+![8ef4fdfcf05161dcaf77a27cab1670b5](https://github.com/user-attachments/assets/496b26e3-3f93-4db1-8687-88a0637122ff)
+
