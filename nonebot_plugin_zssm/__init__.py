@@ -12,8 +12,8 @@ __plugin_meta__ = PluginMetadata(
     usage="对着任意你不懂的内容发送「zssm」即可",
     homepage="https://github.com/djkcyl/nonebot-plugin-zssm",
     type="application",
-    supported_adapters={"alconna", "~onebot.v11", "~onebot.v12", "~qq"},
-    extra={"author": "djkcyl", "version": "0.0.1"},
+    supported_adapters={"~onebot.v11", "~onebot.v12", "~qq"},
+    extra={"author": "djkcyl", "version": "0.1.1"},
 )
 
 from . import handle  # noqa
