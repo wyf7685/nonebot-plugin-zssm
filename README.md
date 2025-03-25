@@ -75,6 +75,7 @@ _✨ 这是什么？问一下！ ✨_
 | zssm_ai_endpoint | 否 | https://api.deepseek.com/v1 | 使用的 ai 端点 |
 | zssm_ai_token | 是 | 无 | api-key |
 | zssm_ai_model | 否 | deepseek-chat | 使用的模型 |
+| zssm_browser_proxy | 否 | 无 | 浏览器代理 |
 
 ## 🎉 使用
 ### 指令表

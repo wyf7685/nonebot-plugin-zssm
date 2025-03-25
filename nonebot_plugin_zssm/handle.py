@@ -37,7 +37,7 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension):
     )
     msg_url_list = reg_match.findall(reply_msg)
     if msg_url_list:
-        browser = await get_browser()
+        browser = await get_browser(proxy={"server": config.zssm_browser_proxy} if config.zssm_browser_proxy else None)
         msg_url = msg_url_list[0]
         logger.info(f"msg_url: {msg_url}")
         await UniMessage(Text("正在尝试打开消息中的第一条链接")).send(
@@ -45,7 +45,7 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension):
         )
         page = await browser.new_page()
         try:
-            await page.goto(msg_url)
+            await page.goto(msg_url, timeout=60000)
         except Exception:
             return await UniMessage(Text("打开链接失败")).send(reply_to=Reply(msg_id))
         # 获取页面的内容
