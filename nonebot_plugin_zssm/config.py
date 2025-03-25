@@ -8,7 +8,7 @@ class Config(BaseModel):
     
     zssm_ai_vl_endpoint: str = "https://api.siliconflow.cn/v1"
     zssm_ai_vl_token: str | None = None
-    zssm_ai_vl_model: str = "deepseek-vl"
+    zssm_ai_vl_model: str = "Qwen/Qwen2.5-VL-72B-Instruct"
     
     zssm_browser_proxy: str | None = None
 
