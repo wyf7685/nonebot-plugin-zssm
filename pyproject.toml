@@ -1,6 +1,6 @@
 [project]
 name = "nonebot-plugin-zssm"
-version = "0.1.4"
+version = "0.1.5"
 description = "这是什么？问一下！"
 authors = [{ name = "djkcyl", email = "cyl@cyllive.cn" }]
 dependencies = [
@@ -9,6 +9,7 @@ dependencies = [
     "httpx>=0.28.1",
     "openai>=1.68.2",
     "playwright>=1.51.0",
+    "pillow>=11.1.0",
 ]
 requires-python = ">=3.12"
 readme = "README.md"

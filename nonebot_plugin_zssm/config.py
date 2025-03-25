@@ -2,25 +2,30 @@ from pydantic import BaseModel, field_validator
 
 
 class Config(BaseModel):
-    zssm_ai_endpoint: str = "https://api.deepseek.com/v1"
-    zssm_ai_token: str | None = None
-    zssm_ai_model: str = "deepseek-chat"
+    zssm_ai_text_endpoint: str = "https://api.deepseek.com/v1"
+    zssm_ai_text_token: str | None = None
+    zssm_ai_text_model: str = "deepseek-chat"
+    
+    zssm_ai_vl_endpoint: str = "https://api.siliconflow.cn/v1"
+    zssm_ai_vl_token: str | None = None
+    zssm_ai_vl_model: str = "deepseek-vl"
+    
     zssm_browser_proxy: str | None = None
 
-    @field_validator("zssm_ai_endpoint")
-    def check_zssm_ai_endpoint(cls, v):
+    @field_validator("zssm_ai_text_endpoint")
+    def check_zssm_ai_text_endpoint(cls, v):
         if not v.startswith("http://") and not v.startswith("https://"):
-            raise ValueError("zssm_ai_endpoint must start with http:// or https://")
+            raise ValueError("zssm_ai_text_endpoint must start with http:// or https://")
         return v
 
-    @field_validator("zssm_ai_token")
-    def check_zssm_ai_token(cls, v):
+    @field_validator("zssm_ai_text_token")
+    def check_zssm_ai_text_token(cls, v):
         if not v:
-            raise ValueError("zssm_ai_token must not be empty")
+            raise ValueError("zssm_ai_text_token must not be empty")
         return v
 
-    @field_validator("zssm_ai_model")
-    def check_zssm_ai_model(cls, v):
+    @field_validator("zssm_ai_text_model")
+    def check_zssm_ai_text_model(cls, v):
         if not v:
-            raise ValueError("zssm_ai_model must not be empty")
+            raise ValueError("zssm_ai_text_model must not be empty")
         return v
