@@ -16,7 +16,7 @@ class AsyncChatClient:
         self,
         endpoint: str,
         api_key: str,
-        timeout: int = 30,
+        timeout: int = 120,
     ):
         """
         初始化异步聊天客户端

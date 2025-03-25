@@ -37,7 +37,11 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension):
     )
     msg_url_list = reg_match.findall(reply_msg)
     if msg_url_list:
-        browser = await get_browser(proxy={"server": config.zssm_browser_proxy} if config.zssm_browser_proxy else None)
+        browser = await get_browser(
+            proxy={"server": config.zssm_browser_proxy}
+            if config.zssm_browser_proxy
+            else None
+        )
         msg_url = msg_url_list[0]
         logger.info(f"msg_url: {msg_url}")
         await UniMessage(Text("正在尝试打开消息中的第一条链接")).send(
@@ -69,13 +73,13 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension):
         )
     async with AsyncChatClient(config.zssm_ai_endpoint, config.zssm_ai_token) as client:
         response = await client.create(
-            "deepseek-chat",
+            config.zssm_ai_model,
             [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         )
-        logger.debug(response.json())
+        logger.info(response.json())
 
     await UniMessage(Text(response.json()["choices"][0]["message"]["content"])).send(
         reply_to=Reply(msg_id)
