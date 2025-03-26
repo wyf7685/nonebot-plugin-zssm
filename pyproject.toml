@@ -1,6 +1,6 @@
 [project]
 name = "nonebot-plugin-zssm"
-version = "0.1.6"
+version = "0.1.7"
 description = "这是什么？问一下！"
 authors = [{ name = "djkcyl", email = "cyl@cyllive.cn" }]
 dependencies = [

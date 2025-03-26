@@ -1,9 +1,11 @@
 from nonebot_plugin_alconna import on_alconna
 from nonebot import get_plugin_config
 from nonebot_plugin_alconna.builtins.extensions.reply import ReplyRecordExtension
-from nonebot.internal.adapter import Event
+from nonebot.internal.adapter import Event, Bot
 from nonebot_plugin_alconna.uniseg import Reply, UniMessage, Text, MsgId, Image
+from nonebot_plugin_alconna.builtins.uniseg.market_face import MarketFace
 from .api import AsyncChatClient
+from contextlib import suppress
 from .config import Config
 from pathlib import Path
 from PIL import Image as PILImage
@@ -43,7 +45,7 @@ async def url_to_base64(url: str) -> str:
 
 
 @zssm.handle()
-async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event):
+async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bot):
     msg = event.get_message()
     if reply := ext.get_reply(msg_id):
         reply_msg_raw = reply.msg
@@ -58,6 +60,9 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event):
             reply_to=Reply(msg_id)
         )
 
+    with suppress(Exception):
+        await bot.call_api("set_msg_emoji_like", message_id=msg_id, emoji_id=424)
+
     if isinstance(reply_msg_raw, str):
         reply_msg_raw = msg.__class__(reply_msg_raw)
 
@@ -67,6 +72,8 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event):
     for item in reply_msg:
         if isinstance(item, Image):
             reply_msg_display += f"[图片 {item.id}]"
+        if isinstance(item, MarketFace):
+            return await UniMessage(Text("不支持商城表情")).send(reply_to=Reply(msg_id))
         else:
             reply_msg_display += str(item)
 
@@ -83,21 +90,29 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event):
             config.zssm_ai_vl_endpoint, config.zssm_ai_vl_token
         ) as client:
             logger.info(f"image_url: {image_url}")
-            response = await client.create(
-                config.zssm_ai_vl_model,
-                [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": await url_to_base64(image_url)},
-                            },
-                            {"type": "text", "text": "请描述这张图片"},
-                        ],
-                    },
-                ],
-            )
+            try:
+                response = await client.create(
+                    config.zssm_ai_vl_model,
+                    [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": await url_to_base64(image_url)
+                                    },
+                                },
+                                {"type": "text", "text": "请描述这张图片"},
+                            ],
+                        },
+                    ],
+                )
+            except Exception as e:
+                logger.error(e)
+                return await UniMessage(Text("图片识别失败")).send(
+                    reply_to=Reply(msg_id)
+                )
             image_prompt = response.json()["choices"][0]["message"]["content"]
             user_prompt += (
                 f"<type: image, id: {image.id}>\n{image_prompt}\n</type: image>\n"
@@ -135,6 +150,10 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event):
             return await UniMessage(Text("无法获取页面内容")).send(
                 reply_to=Reply(msg_id)
             )
+
+    if msg_url_list or image_list:
+        with suppress(Exception):
+            await bot.call_api("set_msg_emoji_like", message_id=msg_id, emoji_id=314)
 
     user_prompt += f"</random number: {random_number}>\n"
     logger.info(f"user_prompt: \n{user_prompt}")
