@@ -100,8 +100,7 @@ async def install_browser(
         log("error", "Please see: [magenta]https://playwright.dev/python/docs/intro[/]")
         log(
             "error",
-            "Run [magenta]poetry run playwright install[/] or "
-            "[magenta]pdm run playwright install[/] to install Playwright manually.",
+            "Run [magenta]poetry run playwright install[/] or [magenta]pdm run playwright install[/] to install Playwright manually.",
         )
     else:
         log("success", f"Playwright for {browser_type} is installed.")

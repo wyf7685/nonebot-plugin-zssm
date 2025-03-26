@@ -1,4 +1,5 @@
 import json
+
 import httpx
 
 
@@ -23,7 +24,7 @@ class AsyncChatClient:
 
         :param endpoint: API端点
         :param api_key: API密钥
-        :param timeout: 请求超时时间（秒）
+        :param timeout: 请求超时时间
         """
         self.endpoint = endpoint
         self.api_key = api_key
@@ -43,20 +44,19 @@ class AsyncChatClient:
 
     def _build_headers(self) -> dict[str, str]:
         """构建请求头"""
-        headers = {
+        return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        return headers
 
-    async def create(self, model: str, messages: list, stream: bool = False, **kwargs):
+    async def create(self, model: str, messages: list, *, stream: bool = False, **kwargs):
         """
         创建聊天请求
 
         :param model: 使用的模型名称
         :param messages: 消息列表
         :param stream: 是否使用流式响应
-        :return: 生成器（流式模式）或字典（非流式）
+        :return: 生成器或字典
         """
         url = f"{self.base_url}/chat/completions"
 
@@ -64,22 +64,17 @@ class AsyncChatClient:
         payload = {"model": model, "messages": messages, "stream": stream, **kwargs}
 
         # 发送请求
-        response = await self._client.post(
-            url, headers=self._build_headers(), json=payload, timeout=self.timeout
-        )
+        response = await self._client.post(url, headers=self._build_headers(), json=payload, timeout=self.timeout)
 
         if response.status_code != 200:
             try:
                 error_data = response.json()
-                print(error_data)
                 raise APIError(
                     error_data.get("message", "Unknown error"),
                     code=error_data.get("code", response.status_code),
                 )
             except json.JSONDecodeError:
-                raise APIError(
-                    f"HTTP Error {response.status_code}", code=response.status_code
-                )
+                raise APIError(f"HTTP Error {response.status_code}", code=response.status_code) from None
         return response
 
     async def stream_response(self, response: httpx.Response):
@@ -98,4 +93,3 @@ class AsyncChatClient:
 
     async def non_stream_response(self, response: httpx.Response):
         return response.json()
-

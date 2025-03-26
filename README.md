@@ -78,7 +78,7 @@ zssm_ai_vl_model=Qwen/Qwen2.5-VL-72B-Instruct -->
 |:-----:|:----:|:----:|:----:|
 | zssm_ai_text_endpoint | 否 | https://api.deepseek.com/v1 | 解释使用的 ai 端点 |
 | zssm_ai_text_token | 是 | 无 | 解释使用的 api-key |
-| zssm_ai_text_model | 否 | deepseek-chat | 解释使用的模型 |
+| zssm_ai_text_model | 否 | deepseek-reasoner | 解释使用的模型 |
 | zssm_ai_vl_endpoint | 否 | https://api.siliconflow.cn/v1 | 识图使用的 ai 端点 |
 | zssm_ai_vl_token | 是 | 无 | 解释使用的 api-key |
 | zssm_ai_vl_model | 否 | Qwen/Qwen2.5-VL-72B-Instruct | 解释使用的模型 |

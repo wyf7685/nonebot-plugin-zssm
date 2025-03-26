@@ -1,8 +1,7 @@
-from nonebot import require, get_driver
+from nonebot import get_driver, require
 from nonebot.plugin import PluginMetadata
 
 from .browser import install_browser
-
 
 require("nonebot_plugin_alconna")
 
@@ -16,7 +15,8 @@ __plugin_meta__ = PluginMetadata(
     extra={"author": "djkcyl", "version": "0.1.8"},
 )
 
-from . import handle  # noqa
 
 driver = get_driver()
 driver.on_startup(install_browser)
+
+from . import handle  # noqa: E402, F401
