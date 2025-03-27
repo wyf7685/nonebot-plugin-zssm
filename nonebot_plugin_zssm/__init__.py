@@ -12,7 +12,7 @@ __plugin_meta__ = PluginMetadata(
     homepage="https://github.com/djkcyl/nonebot-plugin-zssm",
     type="application",
     supported_adapters={"~onebot.v11", "~onebot.v12", "~qq"},
-    extra={"author": "djkcyl", "version": "0.1.10"},
+    extra={"author": "djkcyl", "version": "0.1.11"},
 )
 
 

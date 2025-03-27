@@ -1,4 +1,5 @@
 import base64
+import json
 import random
 import re
 import ssl
@@ -157,5 +158,19 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
             ],
         )
         logger.info(response.json())
+    try:
+        llm_output = json.loads(response.json()["choices"][0]["message"]["content"])
+        # 从模型输出中提取回复 {"output": "......", "keyword": ["xxx", "xxx"], "block": false}
+        if llm_output.get("block", True):
+            response = "（抱歉，我现在还不会这个）"
+        else:
+            response = f"关键词: {' | '.join(llm_output['keyword'])}\n\n{llm_output['output']}"
+    except json.JSONDecodeError:
+        return await UniMessage(Text("AI 回复解析失败，可能是模型未按照指定要求输出，请重试")).send(reply_to=Reply(msg_id))
+    except KeyError:
+        return await UniMessage(Text("AI 回复解析失败，可能是模型输出格式不正确，请重试")).send(reply_to=Reply(msg_id))
 
-    await UniMessage(Text(response.json()["choices"][0]["message"]["content"])).send(reply_to=Reply(msg_id))
+    with suppress(Exception):
+        await bot.call_api("set_msg_emoji_like", message_id=msg_id, emoji_id=144)
+
+    await UniMessage(Text(response)).send(reply_to=Reply(msg_id))
