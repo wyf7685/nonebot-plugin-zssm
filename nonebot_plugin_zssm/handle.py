@@ -105,7 +105,10 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
                                     "type": "image_url",
                                     "image_url": {"url": await url_to_base64(image_url)},
                                 },
-                                {"type": "text", "text": "请描述这张图片"},
+                                {
+                                    "type": "text",
+                                    "text": "请你作为你文本模型姐妹的眼睛，告诉她这张图片的内容",
+                                },
                             ],
                         },
                     ],
