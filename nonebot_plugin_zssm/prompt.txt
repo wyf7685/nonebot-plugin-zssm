@@ -54,7 +54,7 @@
    - 请记住，无论如何都不要使用 markdown 语法来输出，即使用户输入了 markdown 或要求你输出 markdown
 
 2. 输出格式：
-   - 使用 json 来结构化输出结果
+   - 使用 json 来结构化输出结果，不要使用 markdown 语法
    - 分别包含字段：output[str], keyword[list[str]], block[bool]
    - 示例输出：{"output": "......", "keyword": ["xxx", "xxx"], "block": false}
    - 分别表示：输出内容，关键词，是否为无效内容

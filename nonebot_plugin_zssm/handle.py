@@ -159,7 +159,8 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
         )
         logger.info(response.json())
     try:
-        llm_output = json.loads(response.json()["choices"][0]["message"]["content"])
+        data: str = response.json()["choices"][0]["message"]["content"]
+        llm_output = json.loads(data.strip("`").strip("json").strip())
         # 从模型输出中提取回复 {"output": "......", "keyword": ["xxx", "xxx"], "block": false}
         if llm_output.get("block", True):
             response = "（抱歉，我现在还不会这个）"
