@@ -4,7 +4,7 @@ import re
 import sys
 from pathlib import Path
 
-from loguru import logger
+from nonebot import logger
 from playwright._impl._driver import compute_driver_executable, get_driver_env
 
 

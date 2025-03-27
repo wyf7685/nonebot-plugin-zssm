@@ -1,10 +1,10 @@
 [project]
 name = "nonebot-plugin-zssm"
-version = "0.1.12"
+version = "0.2.0"
 description = "这是什么？问一下！"
 authors = [{ name = "djkcyl", email = "cyl@cyllive.cn" }]
 dependencies = [
-    "nonebot2[fastapi,websockets]",
+    "nonebot2[fastapi,websockets]>=2.4.2",
     "nonebot-plugin-alconna>=0.56.2",
     "httpx>=0.28.1",
     "openai>=1.68.2",

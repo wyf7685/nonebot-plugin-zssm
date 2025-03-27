@@ -1,7 +1,8 @@
 from nonebot import get_driver, require
-from nonebot.plugin import PluginMetadata
+from nonebot.plugin import PluginMetadata, inherit_supported_adapters
 
 from .browser import install_browser
+from .config import Config
 
 require("nonebot_plugin_alconna")
 
@@ -11,8 +12,9 @@ __plugin_meta__ = PluginMetadata(
     usage="对着任意你不懂的内容发送「zssm」即可",
     homepage="https://github.com/djkcyl/nonebot-plugin-zssm",
     type="application",
-    supported_adapters={"~onebot.v11", "~onebot.v12", "~qq"},
-    extra={"author": "djkcyl", "version": "0.1.12"},
+    config=Config,
+    supported_adapters=inherit_supported_adapters("nonebot_plugin_alconna"),
+    extra={"author": "djkcyl", "version": "0.2.0"},
 )
 
 

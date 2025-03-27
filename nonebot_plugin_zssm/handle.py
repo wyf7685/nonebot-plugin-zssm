@@ -8,8 +8,7 @@ from io import BytesIO
 from pathlib import Path
 
 import httpx
-from loguru import logger
-from nonebot import get_plugin_config
+from nonebot import get_plugin_config, logger
 from nonebot.internal.adapter import Bot, Event
 from nonebot_plugin_alconna import on_alconna
 from nonebot_plugin_alconna.builtins.extensions.reply import ReplyRecordExtension
@@ -121,7 +120,8 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
             user_prompt += f"<type: image, id: {image.id}>\n{image_prompt}\n</type: image>\n"
 
     reg_match = re.compile(
-        r"\b(?:https?|ftp):\/\/[^\s\/?#]+[^\s]*|\b(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*(?:\/[^\s]*)?\b"
+        # r"\b(?:https?|ftp):\/\/[^\s\/?#]+[^\s]*|\b(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*(?:\/[^\s]*)?\b"
+        r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\b"
     )
     msg_url_list = reg_match.findall(str(reply_msg))
     if msg_url_list:
@@ -143,9 +143,8 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
         if not page_content:
             return await UniMessage(Text("无法获取页面内容")).send(reply_to=Reply(msg_id))
 
-    if msg_url_list or image_list:
-        with suppress(Exception):
-            await bot.call_api("set_msg_emoji_like", message_id=msg_id, emoji_id=314)
+    if (msg_url_list or image_list) and bot.adapter.get_name() == "OneBot V11":
+        await bot.call_api("set_msg_emoji_like", message_id=msg_id, emoji_id=314)
 
     user_prompt += f"</random number: {random_number}>\n"
     logger.info(f"user_prompt: \n{user_prompt}")
@@ -164,14 +163,16 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
         # 从模型输出中提取回复 {"output": "......", "keyword": ["xxx", "xxx"], "block": false}
         if llm_output.get("block", True):
             response = "（抱歉，我现在还不会这个）"
+        elif llm_output.get("keyword"):
+            response = f"关键词：{' | '.join(llm_output['keyword'])}\n\n{llm_output['output']}"
         else:
-            response = f"关键词: {' | '.join(llm_output['keyword'])}\n\n{llm_output['output']}"
+            response = f"{llm_output['output']}"
     except json.JSONDecodeError:
         return await UniMessage(Text("AI 回复解析失败，可能是模型未按照指定要求输出，请重试")).send(reply_to=Reply(msg_id))
     except KeyError:
         return await UniMessage(Text("AI 回复解析失败，可能是模型输出格式不正确，请重试")).send(reply_to=Reply(msg_id))
 
-    with suppress(Exception):
+    if bot.adapter.get_name() == "OneBot V11":
         await bot.call_api("set_msg_emoji_like", message_id=msg_id, emoji_id=144)
 
     await UniMessage(Text(response)).send(reply_to=Reply(msg_id))

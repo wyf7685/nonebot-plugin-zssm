@@ -1,4 +1,5 @@
-from pydantic import BaseModel, field_validator
+from nonebot.compat import field_validator
+from pydantic import BaseModel
 
 
 class Config(BaseModel):

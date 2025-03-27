@@ -1,4 +1,4 @@
-from loguru import logger
+from nonebot import logger
 from playwright.async_api import Browser, Error, Playwright, async_playwright
 
 from .installer import install_browser
