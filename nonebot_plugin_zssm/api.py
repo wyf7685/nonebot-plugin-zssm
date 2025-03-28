@@ -1,6 +1,9 @@
 import json
+from contextlib import _AsyncGeneratorContextManager
+from typing import Any, AsyncGenerator
 
 import httpx
+from nonebot.log import logger
 
 
 class APIError(Exception):
@@ -19,16 +22,8 @@ class AsyncChatClient:
         api_key: str,
         timeout: int = 120,
     ):
-        """
-        初始化异步聊天客户端
-
-        :param endpoint: API端点
-        :param api_key: API密钥
-        :param timeout: 请求超时时间
-        """
         self.endpoint = endpoint
         self.api_key = api_key
-        self.base_url = endpoint
         self.timeout = timeout
         self._client = httpx.AsyncClient()
 
@@ -39,57 +34,71 @@ class AsyncChatClient:
         await self.close()
 
     async def close(self):
-        """关闭客户端"""
         await self._client.aclose()
 
     def _build_headers(self) -> dict[str, str]:
-        """构建请求头"""
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
 
-    async def create(self, model: str, messages: list, *, stream: bool = False, **kwargs):
-        """
-        创建聊天请求
+    async def create(self, model: str, messages: list[dict[str, Any]], **kwargs) -> dict:
+        """发起非流式请求并返回解析后的响应"""
+        url = f"{self.endpoint}/chat/completions"
+        payload = {"model": model, "messages": messages, "stream": False, **kwargs}
 
-        :param model: 使用的模型名称
-        :param messages: 消息列表
-        :param stream: 是否使用流式响应
-        :return: 生成器或字典
-        """
-        url = f"{self.base_url}/chat/completions"
-
-        # 构建基础请求参数
-        payload = {"model": model, "messages": messages, "stream": stream, **kwargs}
-
-        # 发送请求
         response = await self._client.post(url, headers=self._build_headers(), json=payload, timeout=self.timeout)
 
         if response.status_code != 200:
-            try:
-                error_data = response.json()
-                raise APIError(
-                    error_data.get("message", "Unknown error"),
-                    code=error_data.get("code", response.status_code),
-                )
-            except json.JSONDecodeError:
-                raise APIError(f"HTTP Error {response.status_code}", code=response.status_code) from None
-        return response
+            await self._handle_error(response)
 
-    async def stream_response(self, response: httpx.Response):
-        self.content = ""
-        async for chunk in response.aiter_lines():
-            if not chunk.strip() or chunk.startswith(": ping"):
-                continue
-            try:
-                if chunk.startswith("data: "):
-                    data: dict = json.loads(chunk[6:])
-                    if data["finish_reason"] == "stop":
-                        self.content += data["choices"][0]["delta"]["content"]
-                    yield data
-            except json.JSONDecodeError:
-                continue
-
-    async def non_stream_response(self, response: httpx.Response):
         return response.json()
+
+    def stream_create(self, model: str, messages: list[dict[str, Any]], **kwargs) -> AsyncGenerator[str, None]:
+        """发起流式请求并返回异步生成器"""
+        url = f"{self.endpoint}/chat/completions"
+        payload = {"model": model, "messages": messages, "stream": True, **kwargs}
+
+        response_stream = self._client.stream("POST", url, headers=self._build_headers(), json=payload, timeout=self.timeout)
+
+        return self._process_stream(response_stream)
+
+    async def _handle_error(self, response: httpx.Response):
+        """统一错误处理"""
+        try:
+            error_data = response.json()
+            message = error_data.get("message", "Unknown error")
+            code = error_data.get("code", response.status_code)
+        except json.JSONDecodeError:
+            message = f"HTTP Error {response.status_code}"
+            code = response.status_code
+        raise APIError(message, code)
+
+    async def _process_stream(self, response: _AsyncGeneratorContextManager[httpx.Response, None]) -> AsyncGenerator[str, None]:
+        """处理流式响应"""
+        self.content = ""
+        self.reasoning_content = ""
+
+        async with response as resp:
+            if resp.status_code != 200:
+                await self._handle_error(resp)
+
+            async for chunk in resp.aiter_lines():
+                try:
+                    if chunk.startswith("data: "):
+                        data_str = chunk[6:].strip()
+                        if data_str == "[DONE]":
+                            continue
+
+                        data = json.loads(data_str)
+                        choice = data["choices"][0]
+                        delta = choice.get("delta", {})
+
+                        # 更新内容
+                        self.reasoning_content += delta["reasoning_content"] or ""
+                        self.content += delta["content"] or ""
+
+                        yield self.reasoning_content + self.content
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse stream chunk: {chunk}")
+                    continue

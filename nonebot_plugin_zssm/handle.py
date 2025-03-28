@@ -3,13 +3,13 @@ import json
 import random
 import re
 import ssl
-from contextlib import suppress
+import time
 from io import BytesIO
 from pathlib import Path
 
 import httpx
 from nonebot import get_plugin_config, logger
-from nonebot.internal.adapter import Bot, Event
+from nonebot.adapters.satori import Bot, MessageEvent
 from nonebot_plugin_alconna import on_alconna
 from nonebot_plugin_alconna.builtins.extensions.reply import ReplyRecordExtension
 from nonebot_plugin_alconna.builtins.uniseg.market_face import MarketFace
@@ -52,8 +52,9 @@ async def url_to_base64(url: str) -> str:
 
 
 @zssm.handle()
-async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bot):
+async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: MessageEvent, bot: Bot):
     msg = event.get_message()
+    channel_id = event.channel.id
     if reply := ext.get_reply(msg_id):
         reply_msg_raw = reply.msg
     else:
@@ -65,8 +66,7 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
     if not config.zssm_ai_text_token or not config.zssm_ai_vl_token:
         return await UniMessage(Text("未配置 Api Key, 暂时无法使用")).send(reply_to=Reply(msg_id))
 
-    with suppress(Exception):
-        await bot.call_api("set_msg_emoji_like", message_id=msg_id, emoji_id=424)
+    await bot.reaction_create(channel_id=channel_id, message_id=msg_id, emoji="424")
 
     if isinstance(reply_msg_raw, str):
         reply_msg_raw = msg.__class__(reply_msg_raw)
@@ -94,8 +94,11 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
             continue
         async with AsyncChatClient(config.zssm_ai_vl_endpoint, config.zssm_ai_vl_token) as client:
             logger.info(f"image_url: {image_url}")
+            last_time = time.time()
+            last_chunk = ""
+            i = 0
             try:
-                response = await client.create(
+                async for chunk in client.stream_create(
                     config.zssm_ai_vl_model,
                     [
                         {
@@ -112,12 +115,19 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
                             ],
                         },
                     ],
-                )
+                ):
+                    i += 1
+                    last_chunk = chunk
+                    if time.time() - last_time > 5:
+                        last_time = time.time()
+                        small_chunk = f"{chunk[:20]}...{len(chunk) - 40}...{chunk[-20:]}" if len(chunk) > 60 else chunk
+                        logger.info(f"stream_create: {i}, {small_chunk}")
+                logger.info(f"stream_create_end: {i}, {last_chunk}")
+
             except Exception as e:
                 logger.error(e)
                 return await UniMessage(Text("图片识别失败")).send(reply_to=Reply(msg_id))
-            image_prompt = response.json()["choices"][0]["message"]["content"]
-            user_prompt += f"<type: image, id: {image.id}>\n{image_prompt}\n</type: image>\n"
+            user_prompt += f"<type: image, id: {image.id}>\n{client.content}\n</type: image>\n"
 
     reg_match = re.compile(
         # r"\b(?:https?|ftp):\/\/[^\s\/?#]+[^\s]*|\b(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*(?:\/[^\s]*)?\b"
@@ -143,36 +153,48 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
         if not page_content:
             return await UniMessage(Text("无法获取页面内容")).send(reply_to=Reply(msg_id))
 
-    if (msg_url_list or image_list) and bot.adapter.get_name() == "OneBot V11":
-        await bot.call_api("set_msg_emoji_like", message_id=msg_id, emoji_id=314)
+    if msg_url_list or image_list:
+        await bot.reaction_create(channel_id=channel_id, message_id=msg_id, emoji="314")
 
     user_prompt += f"</random number: {random_number}>\n"
     logger.info(f"user_prompt: \n{user_prompt}")
     async with AsyncChatClient(config.zssm_ai_text_endpoint, config.zssm_ai_text_token) as client:
-        response = await client.create(
+        last_time = time.time()
+        last_chunk = ""
+        i = 0
+        async for chunk in client.stream_create(
             config.zssm_ai_text_model,
             [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-        )
-        logger.info(response.json())
-    try:
-        data: str = response.json()["choices"][0]["message"]["content"]
-        llm_output = json.loads(data.strip("`").strip("json").strip())
-        # 从模型输出中提取回复 {"output": "......", "keyword": ["xxx", "xxx"], "block": false}
-        if llm_output.get("block", True):
-            response = "（抱歉，我现在还不会这个）"
-        elif llm_output.get("keyword"):
-            response = f"关键词：{' | '.join(llm_output['keyword'])}\n\n{llm_output['output']}"
-        else:
-            response = f"{llm_output['output']}"
-    except json.JSONDecodeError:
-        return await UniMessage(Text("AI 回复解析失败，可能是模型未按照指定要求输出，请重试")).send(reply_to=Reply(msg_id))
-    except KeyError:
-        return await UniMessage(Text("AI 回复解析失败，可能是模型输出格式不正确，请重试")).send(reply_to=Reply(msg_id))
+        ):
+            try:
+                i += 1
+                last_chunk = chunk
+                if time.time() - last_time > 5:
+                    last_time = time.time()
+                    small_chunk = f"{chunk[:20]}...{len(chunk) - 40}...{chunk[-20:]}" if len(chunk) > 60 else chunk
+                    logger.info(f"stream_create: {i}, {small_chunk}")
+            except Exception as e:
+                logger.error(e)
+                return await UniMessage(Text("AI 回复失败")).send(reply_to=Reply(msg_id))
+        logger.info(f"stream_create_end: {i}, {last_chunk}")
+        try:
+            data: str = client.content
+            data = data.strip("`").strip("json").strip()
+            llm_output = json.loads(data.strip("`").strip("json").strip())
+            if llm_output.get("block", True):
+                response = "（抱歉，我现在还不会这个）"
+            elif llm_output.get("keyword"):
+                response = f"关键词：{' | '.join(llm_output['keyword'])}\n\n{llm_output['output']}"
+            else:
+                response = f"{llm_output['output']}"
+        except json.JSONDecodeError:
+            return await UniMessage(Text("AI 回复解析失败，可能是模型未按照指定要求输出，请重试")).send(reply_to=Reply(msg_id))
+        except KeyError:
+            return await UniMessage(Text("AI 回复解析失败，可能是模型输出格式不正确，请重试")).send(reply_to=Reply(msg_id))
 
-    if bot.adapter.get_name() == "OneBot V11":
-        await bot.call_api("set_msg_emoji_like", message_id=msg_id, emoji_id=144)
+    await bot.reaction_create(channel_id=channel_id, message_id=msg_id, emoji="144")
 
     await UniMessage(Text(response)).send(reply_to=Reply(msg_id))

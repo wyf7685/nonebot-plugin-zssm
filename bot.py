@@ -1,10 +1,10 @@
 import nonebot
-from nonebot.adapters.onebot.v11 import Adapter as OneBotAdapter
+from nonebot.adapters.satori import Adapter as SatoriAdapter
 
 nonebot.init()
 
 driver = nonebot.get_driver()
-driver.register_adapter(OneBotAdapter)
+driver.register_adapter(SatoriAdapter)
 
 nonebot.load_plugins("nonebot_plugin_zssm")
 
