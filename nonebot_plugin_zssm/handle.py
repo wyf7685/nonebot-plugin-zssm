@@ -189,20 +189,22 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
             logger.info(f"AI响应完成: {i}, {last_chunk}")
 
             data: str = client.content
-            data = data.strip("`").strip("json").strip()
+            markdown_pattern = r"^```\w*\s*|\s*```$"
+            data = re.sub(markdown_pattern, "", data.strip())
 
-            llm_output = json.loads(data)
+            try:
+                llm_output = json.loads(data)
 
-            if llm_output.get("block", True):
-                return "（抱歉, 我现在还不会这个）"
-            if llm_output.get("keyword"):
-                return f"关键词：{' | '.join(llm_output['keyword'])}\n\n{llm_output['output']}"
-            return f"{llm_output['output']}"
+                if llm_output.get("block", True):
+                    return "（抱歉, 我现在还不会这个）"
+                if llm_output.get("keyword"):
+                    return f"关键词：{' | '.join(llm_output['keyword'])}\n\n{llm_output['output']}"
+                return f"{llm_output['output']}"
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON解析失败: {data}")
+                logger.error(e)
+                return None
 
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON解析失败: {data}")
-        logger.error(e)
-        return None
     except KeyError as e:
         logger.error(f"缺少必要字段: {data}")
         logger.error(e)
