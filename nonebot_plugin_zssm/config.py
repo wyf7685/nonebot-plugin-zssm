@@ -13,6 +13,11 @@ class Config(BaseModel):
 
     zssm_browser_proxy: str | None = None
 
+    # PDF处理设置
+    zssm_pdf_max_size: int = 10 * 1024 * 1024  # 10MB
+    zssm_pdf_max_pages: int = 50  # 最大处理页数
+    zssm_pdf_max_chars: int = 300000  # 最大字符数
+
     @field_validator("zssm_ai_text_endpoint")
     def check_zssm_ai_text_endpoint(cls, v):  # noqa: N805
         if not v.startswith("http://") and not v.startswith("https://"):
