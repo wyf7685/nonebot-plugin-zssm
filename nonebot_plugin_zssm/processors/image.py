@@ -10,7 +10,9 @@ from nonebot_plugin_alconna.uniseg import Image
 from PIL import Image as PILImage
 
 from ..api import AsyncChatClient
-from ..config import config
+from ..config import plugin_config
+
+config = plugin_config.vl
 
 
 async def url_to_base64(url: str) -> str:
@@ -67,7 +69,7 @@ async def process_image(image: Image) -> str | None:
     Returns:
         Optional[str]: 图片描述内容, 失败时返回None
     """
-    if not image.url or not config.zssm_ai_vl_token:
+    if not image.url or not config.token:
         return None
 
     logger.info(f"处理图片: {image.url}")
@@ -76,9 +78,9 @@ async def process_image(image: Image) -> str | None:
     i = 0
 
     try:
-        async with AsyncChatClient(config.zssm_ai_vl_endpoint, config.zssm_ai_vl_token) as client:
+        async with AsyncChatClient(config.endpoint, config.token) as client:
             async for chunk in client.stream_create(
-                config.zssm_ai_vl_model,
+                config.name,
                 _completion_msg(await url_to_base64(image.url)),
             ):
                 i += 1

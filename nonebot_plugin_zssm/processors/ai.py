@@ -6,7 +6,9 @@ from nonebot.compat import type_validate_json
 from pydantic import BaseModel
 
 from ..api import AsyncChatClient
-from ..config import config
+from ..config import plugin_config
+
+config = plugin_config.text
 
 
 class LLMResponse(BaseModel):
@@ -52,16 +54,16 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
     Returns:
         Optional[str]: AI生成的响应, 失败时返回None
     """
-    if not config.zssm_ai_text_token:
+    if not config.token:
         return None
 
     try:
         last_time = time.time()
         last_chunk = ""
         i = 0
-        async with AsyncChatClient(config.zssm_ai_text_endpoint, config.zssm_ai_text_token) as client:
+        async with AsyncChatClient(config.endpoint, config.token) as client:
             async for chunk in client.stream_create(
-                config.zssm_ai_text_model,
+                config.name,
                 [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},

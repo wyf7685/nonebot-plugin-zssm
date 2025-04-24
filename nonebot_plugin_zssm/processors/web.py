@@ -1,7 +1,9 @@
 from nonebot import logger
 
 from ..browser import get_browser
-from ..config import config
+from ..config import plugin_config
+
+config = plugin_config.browser
 
 
 async def process_web_page(url: str) -> str | None:
@@ -14,7 +16,7 @@ async def process_web_page(url: str) -> str | None:
         Optional[str]: 网页内容, 失败时返回None
     """
     try:
-        browser = await get_browser(proxy={"server": config.zssm_browser_proxy} if config.zssm_browser_proxy else None)
+        browser = await get_browser(proxy={"server": config.proxy} if config.proxy else None)
         async with await browser.new_page() as page:
             try:
                 await page.goto(url, timeout=60000)

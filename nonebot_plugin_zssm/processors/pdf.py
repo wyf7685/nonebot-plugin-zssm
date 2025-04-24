@@ -5,7 +5,9 @@ import fitz  # PyMuPDF
 import httpx
 from nonebot import logger
 
-from ..config import config
+from ..config import plugin_config
+
+config = plugin_config.pdf
 
 
 async def download_pdf(url: str) -> BytesIO | None:
@@ -27,10 +29,8 @@ async def download_pdf(url: str) -> BytesIO | None:
         ):
             async for chunk in resp.raise_for_status().aiter_bytes(4096):
                 total_size += len(chunk)
-                if total_size > config.zssm_pdf_max_size:
-                    logger.error(
-                        f"PDF文件过大: {total_size / 1024 / 1024:.2f}MB, 超过{config.zssm_pdf_max_size / 1024 / 1024:.2f}MB限制"
-                    )
+                if total_size > config.max_size:
+                    logger.error(f"PDF文件过大: {total_size / 1024 / 1024:.2f}MB, 超过{config.max_size / 1024 / 1024:.2f}MB限制")
                     return None
 
                 buffer.write(chunk)
@@ -62,7 +62,7 @@ async def process_pdf(url: str) -> str | None:
             temp_file.write(pdf_buffer.getvalue())
             with fitz.open(temp_file.name) as doc:
                 # 检查页数
-                if len(doc) > (max_pages := config.zssm_pdf_max_pages):
+                if len(doc) > (max_pages := config.max_pages):
                     logger.info(f"PDF页数过多: {len(doc)}, 将只处理前{max_pages}页")
                     page_count = max_pages
                 else:
@@ -72,7 +72,7 @@ async def process_pdf(url: str) -> str | None:
                 full_text = "\n".join(doc.load_page(page_num).get_textpage().extractText() for page_num in range(page_count))
 
                 # 如果文本太长，截取前N个字符
-                if len(full_text) > (max_chars := config.zssm_pdf_max_chars):
+                if len(full_text) > (max_chars := config.max_chars):
                     logger.info(f"PDF内容过长，已截取前{max_chars}个字符，原长度: {len(full_text)}")
                     full_text = full_text[:max_chars] + "\n...[内容过长已截断]"
 

@@ -12,7 +12,7 @@ from nonebot_plugin_alconna.builtins.extensions.reply import ReplyRecordExtensio
 from nonebot_plugin_alconna.builtins.uniseg.market_face import MarketFace
 from nonebot_plugin_alconna.uniseg import Image, MsgId, Reference, Reply, UniMessage, message_reaction
 
-from .config import config
+from .config import plugin_config
 from .constant import SYSTEM_PROMPT_RAW
 from .processors.ai import generate_ai_response
 from .processors.image import process_image
@@ -130,7 +130,7 @@ zssm = on_alconna(
 @zssm.handle()
 async def check_config(msg_id: MsgId):
     # 验证API配置
-    if not config.zssm_ai_text_token or not config.zssm_ai_vl_token:
+    if not plugin_config.text.token or not plugin_config.vl.token:
         await UniMessage.text("未配置 Api Key, 暂时无法使用").finish(reply_to=Reply(msg_id))
 
 
