@@ -1,6 +1,7 @@
 from nonebot import logger
-from playwright.async_api import Browser, Error, Playwright, async_playwright
+from playwright.async_api import Browser, BrowserType, Error, Playwright, async_playwright
 
+from ..config import config
 from .installer import install_browser
 
 _browser: Browser | None = None
@@ -21,8 +22,11 @@ async def init(**kwargs) -> Browser:
 
 async def launch_browser(**kwargs) -> Browser:
     assert _playwright is not None, "Playwright 没有安装"
-    logger.info("使用 firefox 启动")
-    return await _playwright.firefox.launch(**kwargs)
+
+    browser_type = config.zssm_browser_type.lower()
+    browser: BrowserType = getattr(_playwright, browser_type)
+    logger.info(f"使用 {browser_type} 启动")
+    return await browser.launch(**kwargs)
 
 
 async def get_browser(**kwargs) -> Browser:

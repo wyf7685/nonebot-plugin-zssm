@@ -1,16 +1,45 @@
-import json
 import re
 import time
-from pathlib import Path
 
-from nonebot import get_plugin_config, logger
+from nonebot import logger
+from nonebot.compat import type_validate_json
+from pydantic import BaseModel
 
 from ..api import AsyncChatClient
-from ..config import Config
+from ..config import config
 
-# 从文件加载系统提示词
-SYSTEM_PROMPT_RAW = Path(__file__).parent.parent.joinpath("prompt.txt").read_text(encoding="utf-8")
-config = get_plugin_config(Config)
+
+class LLMResponse(BaseModel):
+    """LLM响应模型"""
+
+    output: str
+    block: bool = False
+    keyword: str | list[str] | None = None
+
+
+def extract_output_safe(data: str) -> LLMResponse | None:
+    # 尝试清理Markdown代码块
+    try:
+        markdown_pattern = r"^```\w*\s*|\s*```$"
+        data = re.sub(markdown_pattern, "", data.strip())
+    except Exception as e:
+        logger.warning(f"清理Markdown格式失败: {e}")
+
+    # 记录原始内容用于调试
+    logger.debug(f"尝试解析JSON: {data}")
+
+    # 防御性解析，尝试修复常见问题
+    if data.startswith("```json") and data.endswith("```"):
+        data = data[7:-3].strip()
+
+    # 截取可能的JSON部分
+    data = data[data.find("{") : data.rfind("}") + 1]
+
+    try:
+        return type_validate_json(LLMResponse, data)
+    except ValueError:
+        logger.exception(f"LLM 响应解析失败: {data}")
+        return None
 
 
 async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | None:
@@ -27,11 +56,10 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
         return None
 
     try:
+        last_time = time.time()
+        last_chunk = ""
+        i = 0
         async with AsyncChatClient(config.zssm_ai_text_endpoint, config.zssm_ai_text_token) as client:
-            last_time = time.time()
-            last_chunk = ""
-            i = 0
-
             async for chunk in client.stream_create(
                 config.zssm_ai_text_model,
                 [
@@ -49,57 +77,24 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
                 except Exception as e:
                     logger.error(f"处理AI响应块失败: {e}")
 
-            logger.info(f"AI响应完成: {i}")
-            print(last_chunk)  # noqa: T201
+        logger.info(f"AI响应完成: {i}")
+        print(last_chunk)  # noqa: T201
 
-            data: str = client.content
-            if not data:
-                logger.error("AI返回内容为空")
-                return None
+        if not (data := client.content):
+            logger.error("AI返回内容为空")
+            return None
 
-            # 尝试清理Markdown代码块
-            try:
-                markdown_pattern = r"^```\w*\s*|\s*```$"
-                data = re.sub(markdown_pattern, "", data.strip())
-            except Exception as e:
-                logger.warning(f"清理Markdown格式失败: {e}")
+        if not (llm_output := extract_output_safe(data)):
+            return f"（注: AI响应格式异常）\n\n{data}" if len(data) > 20 else None
 
-            # 尝试解析JSON
-            try:
-                # 记录原始内容用于调试
-                logger.debug(f"尝试解析JSON: {data}")
+        if llm_output.block:
+            return "（抱歉, 我现在还不会这个）"
 
-                # 防御性解析，尝试修复常见问题
-                if data.startswith("```json") and data.endswith("```"):
-                    data = data[7:-3].strip()
-
-                llm_output = json.loads(data)
-
-                # 检查必要字段
-                if "output" not in llm_output:
-                    logger.error(f"AI响应缺少output字段: {data}")
-                    return "（AI回复内容异常，请重试）"
-
-                if llm_output.get("block", True):
-                    return "（抱歉, 我现在还不会这个）"
-
-                if llm_output.get("keyword"):
-                    keywords = llm_output["keyword"]
-                    if isinstance(keywords, list):
-                        return f"关键词：{' | '.join(keywords)}\n\n{llm_output['output']}"
-                    return f"关键词：{keywords}\n\n{llm_output['output']}"
-
-                return llm_output["output"]
-
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON解析失败: {data}")
-                logger.error(f"错误详情: {e}")
-
-                # 直接返回原始内容而不是None，避免完全失败
-                if len(data) > 20:
-                    # 包含一点错误信息但还是显示内容
-                    return f"（注: AI响应格式异常）\n\n{data}"
-                return None
+        return (
+            f"关键词：{' | '.join(keywords) if isinstance(keywords, list) else keywords}\n\n"
+            if (keywords := llm_output.keyword)
+            else ""
+        ) + llm_output.output
 
     except KeyError as e:
         logger.error(f"缺少必要字段: {e}")

@@ -1,168 +1,179 @@
 import random
 import re
-from pathlib import Path
+from typing import Annotated
 
 import httpx
 from arclet.alconna import AllParam
-from nonebot import get_plugin_config, logger
+from nonebot import logger
 from nonebot.internal.adapter import Bot, Event
+from nonebot.params import Depends
 from nonebot_plugin_alconna import Alconna, Args, Match, on_alconna
 from nonebot_plugin_alconna.builtins.extensions.reply import ReplyRecordExtension
 from nonebot_plugin_alconna.builtins.uniseg.market_face import MarketFace
-from nonebot_plugin_alconna.uniseg import Image, MsgId, Reference, Reply, Text, UniMessage, message_reaction
+from nonebot_plugin_alconna.uniseg import Image, MsgId, Reference, Reply, UniMessage, message_reaction
 
-from .config import Config
+from .config import config
+from .constant import SYSTEM_PROMPT_RAW
 from .processors.ai import generate_ai_response
 from .processors.image import process_image
 from .processors.pdf import process_pdf
 from .processors.web import process_web_page
 
 # 从文件加载系统提示词
-SYSTEM_PROMPT_RAW = Path(__file__).parent.joinpath("prompt.txt").read_text(encoding="utf-8")
-config = get_plugin_config(Config)
+PATTERN_URL = re.compile(r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\b")
+PATTERN_PDF = re.compile(r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\.pdf\b")
 
-zssm = on_alconna(Alconna("zssm", Args["content?", AllParam]), extensions=[ReplyRecordExtension()])
+
+async def extract_reply(msg_id: MsgId, ext: ReplyRecordExtension) -> Reply | None:
+    return ext.get_reply(msg_id)
+
+
+MsgReply = Annotated[Reply | None, Depends(extract_reply)]
+
+
+async def extract_reply_content(
+    msg_id: MsgId,
+    reply: MsgReply,
+    event: Event,
+) -> tuple[str, list[Image]]:
+    if reply is None:
+        return "", []
+
+    if not (raw := reply.msg):
+        await UniMessage.text("上一条消息内容为空").finish(reply_to=Reply(msg_id))
+
+    if isinstance(raw, str):
+        raw = event.get_message().__class__(raw)
+
+    msg = UniMessage.generate_sync(message=raw)
+    display = ""
+    for seg in msg:
+        if isinstance(seg, Image):
+            display += f"[图片 {hash(seg.url)}]"
+        elif isinstance(seg, Reference):
+            await UniMessage.text("不支持引用消息").finish(reply_to=Reply(msg_id))
+        elif isinstance(seg, MarketFace):
+            await UniMessage.text("不支持商城表情").finish(reply_to=Reply(msg_id))
+        else:
+            display += str(seg)
+
+    return f"<type: text>\n{display}\n</type: text>", msg[Image]
+
+
+ReplyContent = Annotated[tuple[str, list[Image]], Depends(extract_reply_content)]
+
+
+async def extract_param_content(content: Match[UniMessage], reply: MsgReply) -> tuple[str, list[Image]]:
+    if not content.available:
+        return "", []
+
+    display = ""
+    for seg in content.result:
+        if isinstance(seg, Image):
+            display += f"[图片 {hash(seg.url)}]"
+        display += str(seg)
+
+    type_ = "interest" if reply is not None else "text"
+    return f"<type: {type_}>\n{display}\n</type: {type_}>", content.result[Image]
+
+
+ParamContent = Annotated[tuple[str, list[Image]], Depends(extract_param_content)]
+
+
+async def process_images(image_list: list[Image], msg_id: str):
+    for image in image_list:
+        image_content = await process_image(image)
+        if not image_content:
+            await UniMessage.text("图片识别失败").finish(reply_to=Reply(msg_id))
+        yield f"\n<type: image, id: {hash(image.url)}>\n{image_content}\n</type: image, id: {hash(image.url)}>"
+
+
+async def process_url(url: str, msg_id: str) -> str:
+    logger.info(f"处理URL: {url}")
+
+    # 尝试检测链接内容类型
+    try:
+        async with httpx.AsyncClient() as client:
+            head_response = await client.head(url, follow_redirects=True)
+            content_type = head_response.headers.get("Content-Type", "").lower()
+            is_pdf = bool(PATTERN_PDF.match(url)) or "application/pdf" in content_type
+            logger.info(f"链接内容类型: {content_type} - {head_response.url}")
+    except Exception:
+        # 如果HEAD请求失败，使用URL后缀判断
+        is_pdf = bool(PATTERN_PDF.match(url))
+
+    if is_pdf:
+        # 处理PDF链接
+        await UniMessage.text("正在尝试处理PDF文件").send(reply_to=Reply(msg_id))
+        if pdf_content := await process_pdf(url):
+            return f"\n<type: pdf, url: {url}>\n{pdf_content}\n</type: pdf>"
+
+        await UniMessage.text("无法处理PDF文件，请检查文件是否有效且大小合适").finish(reply_to=Reply(msg_id))
+
+    # 处理普通网页链接
+    await UniMessage.text("正在尝试打开链接").send(reply_to=Reply(msg_id))
+
+    if page_content := await process_web_page(url):
+        return f"\n<type: web_page, url: {url}>\n{page_content}\n</type: web_page>"
+    if pdf_content := await process_pdf(url):
+        return f"\n<type: pdf, url: {url}>\n{pdf_content}\n</type: pdf>"
+
+    await UniMessage.text("无法获取页面内容").finish(reply_to=Reply(msg_id))
+
+
+zssm = on_alconna(
+    Alconna("zssm", Args["content?", AllParam]),
+    extensions=[ReplyRecordExtension()],
+)
 
 
 @zssm.handle()
-async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bot, content: Match[UniMessage]):
-    """处理zssm命令
-
-    Args:
-        msg_id: 消息ID
-        ext: 回复记录扩展
-        event: 事件对象
-        bot: 机器人对象
-        content: 消息内容
-    """
-    msg = event.get_message()
-    random_number = str(random.randint(10000000, 99999999))  # noqa: S311
-    system_prompt = SYSTEM_PROMPT_RAW + random_number
-    user_prompt = ""
-    image_list: list[Image] = []
-
-    # 处理回复消息
-    reply = ext.get_reply(msg_id)
-    if reply:
-        reply_msg_raw = reply.msg
-
-        if not reply_msg_raw:
-            return await UniMessage(Text("上一条消息内容为空")).send(reply_to=Reply(msg_id))
-
-        if isinstance(reply_msg_raw, str):
-            reply_msg_raw = msg.__class__(reply_msg_raw)
-
-        reply_msg = UniMessage.generate_sync(message=reply_msg_raw)
-        image_list.extend(reply_msg.get(Image))
-
-        reply_msg_display = ""
-        for item in reply_msg:
-            if isinstance(item, Image):
-                reply_msg_display += f"[图片 {hash(item.url)}]"
-            elif isinstance(item, Reference):
-                return await UniMessage(Text("不支持引用消息")).send(reply_to=Reply(msg_id))
-            elif isinstance(item, MarketFace):
-                return await UniMessage(Text("不支持商城表情")).send(reply_to=Reply(msg_id))
-            reply_msg_display += str(item)
-
-        user_prompt += f"<type: text>\n{reply_msg_display}\n</type: text>"
-
-    # 处理输入内容
-    if content.available:
-        any_content = content.result
-        image_list.extend(any_content.get(Image))
-
-        any_content_display = ""
-        for item in any_content:
-            if isinstance(item, Image):
-                any_content_display += f"[图片 {hash(item.url)}]"
-            any_content_display += str(item)
-
-        if reply:
-            user_prompt += f"<type: interest>\n{any_content_display}\n</type: interest>"
-        else:
-            user_prompt += f"<type: text>\n{any_content_display}\n</type: text>"
-
-    if not user_prompt and not image_list:
-        return await UniMessage(Text("请回复或输入内容")).send(reply_to=Reply(msg_id))
-
+async def check_config(msg_id: MsgId):
     # 验证API配置
     if not config.zssm_ai_text_token or not config.zssm_ai_vl_token:
-        return await UniMessage(Text("未配置 Api Key, 暂时无法使用")).send(reply_to=Reply(msg_id))
+        await UniMessage.text("未配置 Api Key, 暂时无法使用").finish(reply_to=Reply(msg_id))
+
+
+@zssm.handle()
+async def handle(
+    bot: Bot,
+    event: Event,
+    msg_id: MsgId,
+    reply_content: ReplyContent,
+    param_content: ParamContent,
+) -> None:
+    user_prompt = reply_content[0] + param_content[0]
+    image_list = reply_content[1] + param_content[1]
+    if not user_prompt and not image_list:
+        await UniMessage.text("请回复或输入内容").finish(reply_to=Reply(msg_id))
 
     await message_reaction("424", msg_id, event, bot)
 
     # 处理图片, 最多2张
     if len(image_list) > 2:
-        return await UniMessage(Text("图片数量超过限制, 最多 2 张")).send(reply_to=Reply(msg_id))
+        await UniMessage.text("图片数量超过限制, 最多 2 张").finish(reply_to=Reply(msg_id))
 
-    for image in image_list:
-        image_content = await process_image(image)
-        if image_content:
-            user_prompt += f"\n<type: image, id: {hash(image.url)}>\n{image_content}\n</type: image, id: {hash(image.url)}>"
-        else:
-            return await UniMessage(Text("图片识别失败")).send(reply_to=Reply(msg_id))
+    async for image_content in process_images(image_list, msg_id):
+        user_prompt += image_content
 
     # 处理URL和PDF
-    url_pattern = r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\b"
-    pdf_pattern = r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\.pdf\b"
-
-    # 查找所有URL
-    msg_urls = re.findall(url_pattern, str(user_prompt))
-
-    if msg_urls:
+    if msg_urls := PATTERN_URL.findall(str(user_prompt)):
         # 尝试处理第一个链接
-        url = msg_urls[0]
-        logger.info(f"处理URL: {url}")
-
-        # 尝试检测链接内容类型
-        try:
-            async with httpx.AsyncClient() as client:
-                head_response = await client.head(url, follow_redirects=True)
-                content_type = head_response.headers.get("Content-Type", "").lower()
-                is_pdf = re.match(pdf_pattern, url) or "application/pdf" in content_type
-                logger.info(f"链接内容类型: {content_type} - {head_response.url}")
-        except Exception:
-            # 如果HEAD请求失败，使用URL后缀判断
-            is_pdf = re.match(pdf_pattern, url)
-
-        if is_pdf:
-            # 处理PDF链接
-            await UniMessage(Text("正在尝试处理PDF文件")).send(reply_to=Reply(msg_id))
-
-            pdf_content = await process_pdf(url)
-            if pdf_content:
-                user_prompt += f"\n<type: pdf, url: {url}>\n{pdf_content}\n</type: pdf>"
-            else:
-                return await UniMessage(Text("无法处理PDF文件，请检查文件是否有效且大小合适")).send(reply_to=Reply(msg_id))
-        else:
-            # 处理普通网页链接
-            await UniMessage(Text("正在尝试打开链接")).send(reply_to=Reply(msg_id))
-
-            page_content = await process_web_page(url)
-            if page_content:
-                user_prompt += f"\n<type: web_page, url: {url}>\n{page_content}\n</type: web_page>"
-            else:
-                # 最后尝试作为PDF处理
-                pdf_content = await process_pdf(url)
-                if pdf_content:
-                    user_prompt += f"\n<type: pdf, url: {url}>\n{pdf_content}\n</type: pdf>"
-                else:
-                    return await UniMessage(Text("无法获取页面内容")).send(reply_to=Reply(msg_id))
+        user_prompt += await process_url(msg_urls[0], msg_id)
 
     # 如果处理了URL/PDF或图片, 更新反应
     if msg_urls or image_list:
         await message_reaction("314", msg_id, event, bot)
 
-    # 准备最终的用户提示
+    # 准备最终的提示词
+    random_number = str(random.randint(10000000, 99999999))  # noqa: S311
+    system_prompt = SYSTEM_PROMPT_RAW + random_number
     user_prompt = f"<random number: {random_number}>\n{user_prompt}\n</random number: {random_number}>"
-    logger.info(f"最终用户提示: \n{user_prompt}")
+    logger.info("最终用户提示: \n" + user_prompt.replace("\n", "\\n"))
 
     # 生成AI响应
-    response = await generate_ai_response(system_prompt, user_prompt)
-
-    if response is None:
-        return await UniMessage(Text("AI 回复解析失败, 请重试")).send(reply_to=Reply(msg_id))
+    if (response := await generate_ai_response(system_prompt, user_prompt)) is None:
+        await UniMessage.text("AI 回复解析失败, 请重试").finish(reply_to=Reply(msg_id))
 
     await message_reaction("144", msg_id, event, bot)
-    await UniMessage(Text(response)).send(reply_to=Reply(msg_id))
+    await UniMessage.text(response).finish(reply_to=Reply(msg_id))

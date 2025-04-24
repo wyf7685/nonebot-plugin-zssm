@@ -7,6 +7,8 @@ from pathlib import Path
 from nonebot import logger
 from playwright._impl._driver import compute_driver_executable, get_driver_env
 
+from ..config import config
+
 
 def log(level: str, rich_text: str) -> None:
     getattr(logger.opt(colors=True), level)(
@@ -41,7 +43,7 @@ class Progress:
 
 async def install_browser(
     download_host: str | None = None,
-    browser_type: str = "firefox",
+    browser_type: str = config.zssm_browser_type,
 ):
     env = get_driver_env()
     if download_host:

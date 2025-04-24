@@ -1,9 +1,7 @@
-from nonebot import get_plugin_config, logger
+from nonebot import logger
 
 from ..browser import get_browser
-from ..config import Config
-
-config = get_plugin_config(Config)
+from ..config import config
 
 
 async def process_web_page(url: str) -> str | None:
@@ -17,26 +15,17 @@ async def process_web_page(url: str) -> str | None:
     """
     try:
         browser = await get_browser(proxy={"server": config.zssm_browser_proxy} if config.zssm_browser_proxy else None)
-        page = await browser.new_page()
+        async with await browser.new_page() as page:
+            try:
+                await page.goto(url, timeout=60000)
+            except Exception as e:
+                logger.error(f"打开链接失败: {url}, 错误: {e}")
+                return None
 
-        try:
-            await page.goto(url, timeout=60000)
-        except Exception as e:
-            logger.error(f"打开链接失败: {url}, 错误: {e}")
-            await page.close()
-            return None
-
-        # 获取页面的内容
-        page_content = await page.query_selector("html")
-        content_text = None
-
-        if page_content:
-            content_text = await page_content.inner_text()
-
-        await page.close()
+            # 获取页面的内容
+            page_content = await page.query_selector("html")
+            return page_content and await page_content.inner_text()
 
     except Exception as e:
         logger.error(f"处理网页失败: {url}, 错误: {e}")
         return None
-    else:
-        return content_text

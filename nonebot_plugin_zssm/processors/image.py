@@ -2,16 +2,15 @@ import base64
 import ssl
 import time
 from io import BytesIO
+from typing import Any
 
 import httpx
-from nonebot import get_plugin_config, logger
+from nonebot import logger
 from nonebot_plugin_alconna.uniseg import Image
 from PIL import Image as PILImage
 
 from ..api import AsyncChatClient
-from ..config import Config
-
-config = get_plugin_config(Config)
+from ..config import config
 
 
 async def url_to_base64(url: str) -> str:
@@ -29,8 +28,7 @@ async def url_to_base64(url: str) -> str:
 
     async with httpx.AsyncClient(verify=ssl_context) as client:
         try:
-            response = await client.get(url, timeout=30.0)
-            response.raise_for_status()
+            response = (await client.get(url, timeout=30.0)).raise_for_status()
         except httpx.HTTPError as e:
             logger.error(f"获取图片失败: {url}, 错误: {e}")
             raise
@@ -48,6 +46,18 @@ async def url_to_base64(url: str) -> str:
         return f"data:image/jpeg;base64,{b64_content}"
 
 
+def _completion_msg(image_url: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": image_url}},
+                {"type": "text", "text": "请你作为你文本模型姐妹的眼睛, 告诉她这张图片的内容"},
+            ],
+        },
+    ]
+
+
 async def process_image(image: Image) -> str | None:
     """处理图片内容, 返回图片描述
 
@@ -60,30 +70,16 @@ async def process_image(image: Image) -> str | None:
     if not image.url or not config.zssm_ai_vl_token:
         return None
 
+    logger.info(f"处理图片: {image.url}")
+    last_time = time.time()
+    last_chunk = ""
+    i = 0
+
     try:
         async with AsyncChatClient(config.zssm_ai_vl_endpoint, config.zssm_ai_vl_token) as client:
-            logger.info(f"处理图片: {image.url}")
-            last_time = time.time()
-            last_chunk = ""
-            i = 0
-
             async for chunk in client.stream_create(
                 config.zssm_ai_vl_model,
-                [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": await url_to_base64(image.url)},
-                            },
-                            {
-                                "type": "text",
-                                "text": "请你作为你文本模型姐妹的眼睛, 告诉她这张图片的内容",
-                            },
-                        ],
-                    },
-                ],
+                _completion_msg(await url_to_base64(image.url)),
             ):
                 i += 1
                 last_chunk = chunk
@@ -92,9 +88,9 @@ async def process_image(image: Image) -> str | None:
                     small_chunk = f"{chunk[:20]}...{len(chunk) - 40}...{chunk[-20:]}" if len(chunk) > 60 else chunk
                     logger.info(f"图片处理进度: {i}, {small_chunk}")
 
-            logger.info(f"图片处理完成: {i}, {last_chunk}")
-            return client.content
-
     except Exception as e:
         logger.error(f"图片处理失败: {e}")
         return None
+    else:
+        logger.info(f"图片处理完成: {i}, {last_chunk}")
+        return client.content

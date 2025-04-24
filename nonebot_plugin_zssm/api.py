@@ -16,6 +16,9 @@ class APIError(Exception):
 
 
 class AsyncChatClient:
+    content: str
+    reasoning_content: str
+
     def __init__(
         self,
         endpoint: str,
@@ -90,13 +93,13 @@ class AsyncChatClient:
                         if data_str == "[DONE]":
                             continue
 
-                        data = json.loads(data_str)
-                        choice = data["choices"][0]
-                        delta = choice.get("delta", {})
+                        data: dict = json.loads(data_str)
+                        choice: dict[str, dict] = data["choices"][0]
+                        delta: dict[str, str] = choice.get("delta", {})
 
                         # 更新内容
-                        self.reasoning_content += delta["reasoning_content"] or ""
-                        self.content += delta["content"] or ""
+                        self.reasoning_content += delta.get("reasoning_content") or ""
+                        self.content += delta.get("content") or ""
 
                         yield self.reasoning_content + self.content
                 except json.JSONDecodeError:
