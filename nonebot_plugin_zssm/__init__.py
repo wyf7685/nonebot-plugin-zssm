@@ -2,7 +2,7 @@ from nonebot import get_driver, require
 from nonebot.plugin import PluginMetadata, inherit_supported_adapters
 
 from .browser import install_browser
-from .config import Config
+from .config import Config, config
 
 require("nonebot_plugin_alconna")
 
@@ -17,8 +17,7 @@ __plugin_meta__ = PluginMetadata(
     extra={"author": "djkcyl", "version": "0.3.2"},
 )
 
-
-driver = get_driver()
-driver.on_startup(install_browser)
+if config.zssm_browser_install_on_startup:
+    get_driver().on_startup(install_browser)
 
 from . import handle  # noqa: E402, F401

@@ -14,6 +14,7 @@ class Config(BaseModel):
 
     zssm_browser_proxy: str | None = None
     zssm_browser_type: str = "chromium"
+    zssm_browser_install_on_startup: bool = True
 
     # PDF处理设置
     zssm_pdf_max_size: int = 10 * 1024 * 1024  # 10MB
