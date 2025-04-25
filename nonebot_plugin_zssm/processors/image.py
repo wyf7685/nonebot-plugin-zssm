@@ -48,13 +48,16 @@ async def url_to_base64(url: str) -> str:
         return f"data:image/jpeg;base64,{b64_content}"
 
 
+_PROMPT = "请客观详细地描述这张图片中的内容，包括图片中的主体对象、场景、文字等关键信息。保持描述的准确性和中立性。"
+
+
 def _completion_msg(image_url: str) -> list[dict[str, Any]]:
     return [
         {
             "role": "user",
             "content": [
                 {"type": "image_url", "image_url": {"url": image_url}},
-                {"type": "text", "text": "请你作为你文本模型姐妹的眼睛, 告诉她这张图片的内容"},
+                {"type": "text", "text": _PROMPT},
             ],
         },
     ]
