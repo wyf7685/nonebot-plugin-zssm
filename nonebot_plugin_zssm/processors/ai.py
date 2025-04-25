@@ -44,6 +44,10 @@ def extract_output_safe(data: str) -> LLMResponse | None:
         return None
 
 
+def truncate_chunk(chunk: str) -> str:
+    return f"{chunk[:20]}...{len(chunk) - 40}...{chunk[-20:]}" if len(chunk) > 60 else chunk
+
+
 async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | None:
     """生成AI响应
 
@@ -61,33 +65,26 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
         last_time = time.time()
         last_chunk = ""
         i = 0
-        async with AsyncChatClient(config.endpoint, config.token) as client:
+        async with AsyncChatClient(config) as client:
             async for chunk in client.stream_create(
-                config.name,
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ):
-                try:
-                    i += 1
-                    last_chunk = chunk
-                    if time.time() - last_time > 5:
-                        last_time = time.time()
-                        small_chunk = f"{chunk[:20]}...{len(chunk) - 40}...{chunk[-20:]}" if len(chunk) > 60 else chunk
-                        logger.info(f"AI响应进度: {i}, {small_chunk}")
-                except Exception as e:
-                    logger.error(f"处理AI响应块失败: {e}")
+                i += 1
+                last_chunk = chunk
+                if time.time() - last_time > 5:
+                    last_time = time.time()
+                    logger.info(f"AI响应进度: {i}, {truncate_chunk(last_chunk)}")
 
-        logger.info(f"AI响应完成: {i}")
-        print(last_chunk)  # noqa: T201
+        logger.info(f"AI响应完成: {i}\n{truncate_chunk(last_chunk)}")
 
         if not (data := client.content):
             logger.error("AI返回内容为空")
             return None
 
-        if not (llm_output := extract_output_safe(data)):
-            return f"（注: AI响应格式异常）\n\n{data}" if len(data) > 20 else None
+        if (llm_output := extract_output_safe(data)) is None:
+            logger.error(f"AI响应格式异常: \n{data}")
+            return None
 
         if llm_output.block:
             return "（抱歉, 我现在还不会这个）"
@@ -98,9 +95,6 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
             else ""
         ) + llm_output.output
 
-    except KeyError as e:
-        logger.error(f"缺少必要字段: {e}")
-        return None
     except Exception as e:
         logger.error(f"生成AI响应失败: {e}")
         return None

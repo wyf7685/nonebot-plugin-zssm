@@ -9,14 +9,17 @@ _playwright: Playwright | None = None
 
 
 async def init(**kwargs) -> Browser:
-    global _browser  # noqa: PLW0603
-    global _playwright  # noqa: PLW0603
-    _playwright = await async_playwright().start()
+    global _browser, _playwright  # noqa: PLW0603
+
+    if _playwright is None:
+        _playwright = await async_playwright().start()
+
     try:
         _browser = await launch_browser(**kwargs)
     except Error:
         await install_browser()
         _browser = await launch_browser(**kwargs)
+
     return _browser
 
 

@@ -11,6 +11,7 @@ from PIL import Image as PILImage
 
 from ..api import AsyncChatClient
 from ..config import plugin_config
+from ..constant import IMAGE_PROMPT
 
 config = plugin_config.vl
 
@@ -48,19 +49,18 @@ async def url_to_base64(url: str) -> str:
         return f"data:image/jpeg;base64,{b64_content}"
 
 
-_PROMPT = "请客观详细地描述这张图片中的内容，包括图片中的主体对象、场景、文字等关键信息。保持描述的准确性和中立性。"
+def _completion_msg(image_url: str) -> dict[str, Any]:
+    return {
+        "role": "user",
+        "content": [
+            {"type": "image_url", "image_url": {"url": image_url}},
+            {"type": "text", "text": IMAGE_PROMPT},
+        ],
+    }
 
 
-def _completion_msg(image_url: str) -> list[dict[str, Any]]:
-    return [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": image_url}},
-                {"type": "text", "text": _PROMPT},
-            ],
-        },
-    ]
+def truncate_chunk(chunk: str) -> str:
+    return f"{chunk[:20]}...{len(chunk) - 40}...{chunk[-20:]}" if len(chunk) > 60 else chunk
 
 
 async def process_image(image: Image) -> str | None:
@@ -80,18 +80,19 @@ async def process_image(image: Image) -> str | None:
     last_chunk = ""
     i = 0
 
+    message_content = [
+        {"type": "image_url", "image_url": {"url": await url_to_base64(image.url)}},
+        {"type": "text", "text": IMAGE_PROMPT},
+    ]
+
     try:
-        async with AsyncChatClient(config.endpoint, config.token) as client:
-            async for chunk in client.stream_create(
-                config.name,
-                _completion_msg(await url_to_base64(image.url)),
-            ):
+        async with AsyncChatClient(config) as client:
+            async for chunk in client.stream_create({"role": "user", "content": message_content}):
                 i += 1
                 last_chunk = chunk
                 if time.time() - last_time > 5:
                     last_time = time.time()
-                    small_chunk = f"{chunk[:20]}...{len(chunk) - 40}...{chunk[-20:]}" if len(chunk) > 60 else chunk
-                    logger.info(f"图片处理进度: {i}, {small_chunk}")
+                    logger.info(f"图片处理进度: {i}, {truncate_chunk(last_chunk)}")
 
     except Exception as e:
         logger.error(f"图片处理失败: {e}")
