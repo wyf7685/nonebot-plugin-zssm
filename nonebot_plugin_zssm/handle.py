@@ -40,6 +40,9 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
     system_prompt = SYSTEM_PROMPT_RAW + random_number
     user_prompt = ""
     image_list: list[Image] = []
+    url_pattern = r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\b"
+    pdf_pattern = r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\.pdf\b"
+    raw_user_input = ""
 
     # 处理回复消息
     reply = ext.get_reply(msg_id)
@@ -66,6 +69,7 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
             reply_msg_display += str(item)
 
         user_prompt += f"<type: text>\n{reply_msg_display}\n</type: text>"
+        raw_user_input += reply_msg_display
 
     # 处理输入内容
     if content.available:
@@ -82,6 +86,7 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
             user_prompt += f"<type: interest>\n{any_content_display}\n</type: interest>"
         else:
             user_prompt += f"<type: text>\n{any_content_display}\n</type: text>"
+        raw_user_input += any_content_display
 
     if not user_prompt and not image_list:
         return await UniMessage(Text("请回复或输入内容")).send(reply_to=Reply(msg_id))
@@ -103,12 +108,8 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
         else:
             return await UniMessage(Text("图片识别失败")).send(reply_to=Reply(msg_id))
 
-    # 处理URL和PDF
-    url_pattern = r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\b"
-    pdf_pattern = r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\.pdf\b"
-
-    # 查找所有URL
-    msg_urls = re.findall(url_pattern, str(user_prompt))
+    # 处理URL和PDF - 只从原始用户输入中提取URL，而不是从完整的user_prompt中提取
+    msg_urls = re.findall(url_pattern, raw_user_input)
 
     if msg_urls:
         # 尝试处理第一个链接
@@ -160,6 +161,10 @@ async def handle(msg_id: MsgId, ext: ReplyRecordExtension, event: Event, bot: Bo
 
     # 生成AI响应
     response = await generate_ai_response(system_prompt, user_prompt)
+    # 如果失败，进行一次重试
+    if response is None:
+        logger.warning("AI 回复解析失败，正在重试...")
+        response = await generate_ai_response(system_prompt, user_prompt)
 
     if response is None:
         return await UniMessage(Text("AI 回复解析失败, 请重试")).send(reply_to=Reply(msg_id))

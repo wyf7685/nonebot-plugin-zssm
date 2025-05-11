@@ -94,11 +94,6 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
             except json.JSONDecodeError as e:
                 logger.error(f"JSON解析失败: {data}")
                 logger.error(f"错误详情: {e}")
-
-                # 直接返回原始内容而不是None，避免完全失败
-                if len(data) > 20:
-                    # 包含一点错误信息但还是显示内容
-                    return f"（注: AI响应格式异常）\n\n{data}"
                 return None
 
     except KeyError as e:
