@@ -74,7 +74,7 @@ class AsyncChatClient:
             code = response.status_code
         raise APIError(message, code)
 
-    async def _process_stream(self, response: _AsyncGeneratorContextManager[httpx.Response]) -> AsyncGenerator[str]:
+    async def _process_stream(self, response: _AsyncGeneratorContextManager[httpx.Response, None]) -> AsyncGenerator[str, None]:
         """处理流式响应"""
         self.content = ""
         self.reasoning_content = ""
