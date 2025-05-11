@@ -1,4 +1,5 @@
 from nonebot import get_plugin_config, logger
+from yarl import URL
 
 from ..browser import get_browser
 from ..config import Config
@@ -16,7 +17,18 @@ async def process_web_page(url: str) -> str | None:
         Optional[str]: 网页内容, 失败时返回None
     """
     try:
-        browser = await get_browser(proxy={"server": config.zssm_browser_proxy} if config.zssm_browser_proxy else None)
+        if config.zssm_browser_proxy:
+            proxy_uri = URL(config.zssm_browser_proxy)
+            proxy = {
+                "server": f"{proxy_uri.scheme}://{proxy_uri.host}:{proxy_uri.port}",
+                "username": proxy_uri.user,
+                "password": proxy_uri.password,
+            }
+        else:
+            proxy = None
+
+        logger.info(f"使用代理: {proxy}，{config.zssm_browser_proxy}")
+        browser = await get_browser(proxy=proxy)
         page = await browser.new_page()
 
         try:
