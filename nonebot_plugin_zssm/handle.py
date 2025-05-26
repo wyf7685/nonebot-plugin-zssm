@@ -109,7 +109,7 @@ async def construct_user_prompt(
     reply_content: Annotated[tuple[str, list[Image]], Depends(extract_reply_content)],
     param_content: Annotated[tuple[str, list[Image]], Depends(extract_param_content)],
 ) -> str:
-    prompt = reply_content[0] + param_content[0]
+    raw_input = prompt = reply_content[0] + param_content[0]
     image_list = reply_content[1] + param_content[1]
     if not prompt and not image_list:
         await UniMessage.text("请回复或输入内容").finish(reply_to=True)
@@ -125,7 +125,7 @@ async def construct_user_prompt(
         prompt += image_content
 
     # 处理URL和PDF
-    if msg_urls := PATTERN_URL.findall(str(prompt)):
+    if msg_urls := PATTERN_URL.findall(raw_input):
         # 尝试处理第一个链接
         prompt += await process_url(msg_urls[0])
 
@@ -139,7 +139,7 @@ async def construct_user_prompt(
 
 zssm = on_alconna(
     Alconna("zssm", Args["content?", AllParam]),
-    extensions=[ReplyRecordExtension()],
+    extensions=[ReplyRecordExtension],
 )
 
 
@@ -151,7 +151,11 @@ async def check_config() -> None:
 
 
 @zssm.handle()
-async def handle(user_prompt: Annotated[str, Depends(construct_user_prompt)]) -> None:
+async def handle(
+    msg_id: MsgId,
+    ext: ReplyRecordExtension,
+    user_prompt: Annotated[str, Depends(construct_user_prompt)],
+) -> None:
     random_number = str(random.randint(10000000, 99999999))  # noqa: S311
     system_prompt = SYSTEM_PROMPT_RAW + random_number
     user_prompt = f"<random number: {random_number}>\n{user_prompt}\n</random number: {random_number}>"
@@ -162,4 +166,4 @@ async def handle(user_prompt: Annotated[str, Depends(construct_user_prompt)]) ->
 
     with contextlib.suppress(ActionFailed):
         await message_reaction("144")
-    await UniMessage.text(response).finish(reply_to=True)
+    await UniMessage.text(response).finish(reply_to=ext.get_reply(msg_id) or True)

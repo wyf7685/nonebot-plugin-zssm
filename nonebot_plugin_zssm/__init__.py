@@ -14,7 +14,7 @@ __plugin_meta__ = PluginMetadata(
     type="application",
     config=Config,
     supported_adapters=inherit_supported_adapters("nonebot_plugin_alconna"),
-    extra={"author": "djkcyl", "version": "0.3.2"},
+    extra={"author": "djkcyl", "version": "0.3.6"},
 )
 
 if plugin_config.browser.install_on_startup:

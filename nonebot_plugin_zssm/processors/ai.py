@@ -1,3 +1,4 @@
+import json
 import re
 import time
 
@@ -7,8 +8,10 @@ from pydantic import BaseModel
 
 from ..api import AsyncChatClient
 from ..config import plugin_config
+from ..constant import AUDIT_SYSTEM_PROMPT, AUDIT_USER_PROMPT
 
 config = plugin_config.text
+config_check = plugin_config.check
 
 
 class LLMResponse(BaseModel):
@@ -48,6 +51,63 @@ def truncate_chunk(chunk: str) -> str:
     return f"{chunk[:20]}...{len(chunk) - 40}...{chunk[-20:]}" if len(chunk) > 60 else chunk
 
 
+async def check_prompt_leakage(response: str, system_prompt: str) -> str:
+    """检查AI响应是否泄露了system prompt
+
+    Args:
+        response: AI的响应内容
+        system_prompt: 原始系统提示词
+
+    Returns:
+        tuple[bool, str]: (是否泄露, 审查后的响应)
+    """
+    if config_check is None:
+        # 如果没有配置审查API Token，则跳过审查
+        logger.warning("未配置审查API Token，跳过system prompt泄露检查")
+        return response
+
+    try:
+        prompt = AUDIT_USER_PROMPT.format(
+            system_prompt=system_prompt,
+            response=response,
+        )
+
+        logger.info(f"开始审查AI响应: {config_check.name}")
+        async with AsyncChatClient(config_check) as client:
+            audit_response = await client.create(
+                {"role": "system", "content": AUDIT_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            )
+
+            if not audit_response or "choices" not in audit_response:
+                logger.error("审查AI返回内容为空或格式错误")
+                return response
+
+            audit_content = audit_response["choices"][0]["message"]["content"]
+
+            try:
+                # 清理可能的markdown格式
+                markdown_pattern = r"^```\w*\s*|\s*```$"
+                audit_content = re.sub(markdown_pattern, "", audit_content.strip())
+
+                audit_result: dict[str, object] = json.loads(audit_content)
+                logger.info(f"审查结果: {audit_result}")
+
+                if audit_result.get("leaked", False):
+                    logger.warning("检测到system prompt泄露，已替换响应")
+                    return "（抱歉，我现在还不会这个）"
+            except json.JSONDecodeError as e:
+                logger.error(f"审查结果JSON解析失败: {e}")
+                logger.debug(f"原始审查内容: {audit_content}")
+                return response
+            else:
+                return response
+
+    except Exception as e:
+        logger.error(f"检查prompt泄露失败: {e}")
+        return response
+
+
 async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | None:
     """生成AI响应
 
@@ -82,19 +142,19 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
             logger.error("AI返回内容为空")
             return None
 
-        if (llm_output := extract_output_safe(data)) is None:
+        if (llm_resp := extract_output_safe(data)) is None:
             logger.error(f"AI响应格式异常: \n{data}")
             return None
 
-        if llm_output.block:
+        if llm_resp.block:
             return "（抱歉, 我现在还不会这个）"
 
-        return (
-            f"关键词：{' | '.join(keywords) if isinstance(keywords, list) else keywords}\n\n"
-            if (keywords := llm_output.keyword)
-            else ""
-        ) + llm_output.output
+        output = await check_prompt_leakage(llm_resp.output, system_prompt)
 
-    except Exception as e:
-        logger.error(f"生成AI响应失败: {e}")
+        return (
+            f"关键词：{' | '.join(keywords) if isinstance(keywords, list) else keywords}\n\n" if (keywords := llm_resp.keyword) else ""
+        ) + output
+
+    except KeyError as e:
+        logger.error(f"缺少必要字段: {e}")
         return None

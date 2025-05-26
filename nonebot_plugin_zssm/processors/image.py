@@ -2,7 +2,6 @@ import base64
 import ssl
 import time
 from io import BytesIO
-from typing import Any
 
 import httpx
 from nonebot import logger
@@ -49,16 +48,6 @@ async def url_to_base64(url: str) -> str:
         return f"data:image/jpeg;base64,{b64_content}"
 
 
-def _completion_msg(image_url: str) -> dict[str, Any]:
-    return {
-        "role": "user",
-        "content": [
-            {"type": "image_url", "image_url": {"url": image_url}},
-            {"type": "text", "text": IMAGE_PROMPT},
-        ],
-    }
-
-
 def truncate_chunk(chunk: str) -> str:
     return f"{chunk[:20]}...{len(chunk) - 40}...{chunk[-20:]}" if len(chunk) > 60 else chunk
 
@@ -81,13 +70,14 @@ async def process_image(image: Image) -> str | None:
     i = 0
 
     try:
-        message_content = [
-            {"type": "image_url", "image_url": {"url": await url_to_base64(image.url)}},
+        image_url = await url_to_base64(image.url)
+        content = [
+            {"type": "image_url", "image_url": {"url": image_url}},
             {"type": "text", "text": IMAGE_PROMPT},
         ]
 
         async with AsyncChatClient(config) as client:
-            async for chunk in client.stream_create({"role": "user", "content": message_content}):
+            async for chunk in client.stream_create({"role": "user", "content": content}):
                 i += 1
                 last_chunk = chunk
                 if time.time() - last_time > 5:

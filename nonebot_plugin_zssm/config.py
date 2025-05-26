@@ -45,6 +45,7 @@ class PdfConfig(BaseModel):
 class PluginConfig(BaseModel):
     text: LLMConfig
     vl: LLMConfig
+    check: LLMConfig | None = None
     browser: BrowserConfig = BrowserConfig()
     pdf: PdfConfig = PdfConfig()
 
