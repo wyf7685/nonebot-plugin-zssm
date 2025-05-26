@@ -72,21 +72,21 @@ async def process_images(image_list: list[Image]):
         yield f"\n<type: image, id: {hash(image.url)}>\n{image_content}\n</type: image, id: {hash(image.url)}>"
 
 
+async def url_is_pdf(url: str) -> bool:
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.head(url, follow_redirects=True)
+            content_type: str = resp.headers.get("Content-Type", "")
+            return "application/pdf" in content_type.lower()
+    except Exception:
+        return bool(PATTERN_PDF.match(url))
+
+
 async def process_url(url: str) -> str:
     logger.info(f"处理URL: {url}")
 
     # 尝试检测链接内容类型
-    try:
-        async with httpx.AsyncClient() as client:
-            head_response = await client.head(url, follow_redirects=True)
-            content_type = head_response.headers.get("Content-Type", "").lower()
-            is_pdf = bool(PATTERN_PDF.match(url)) or "application/pdf" in content_type
-            logger.info(f"链接内容类型: {content_type} - {head_response.url}")
-    except Exception:
-        # 如果HEAD请求失败，使用URL后缀判断
-        is_pdf = bool(PATTERN_PDF.match(url))
-
-    if is_pdf:
+    if await url_is_pdf(url):
         # 处理PDF链接
         await UniMessage.text("正在尝试处理PDF文件").send(reply_to=True)
         if pdf_content := await process_pdf(url):

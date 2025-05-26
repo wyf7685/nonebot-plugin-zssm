@@ -80,12 +80,12 @@ async def process_image(image: Image) -> str | None:
     last_chunk = ""
     i = 0
 
-    message_content = [
-        {"type": "image_url", "image_url": {"url": await url_to_base64(image.url)}},
-        {"type": "text", "text": IMAGE_PROMPT},
-    ]
-
     try:
+        message_content = [
+            {"type": "image_url", "image_url": {"url": await url_to_base64(image.url)}},
+            {"type": "text", "text": IMAGE_PROMPT},
+        ]
+
         async with AsyncChatClient(config) as client:
             async for chunk in client.stream_create({"role": "user", "content": message_content}):
                 i += 1
