@@ -59,7 +59,13 @@ class AsyncChatClient:
         url = f"{self.endpoint}/chat/completions"
         payload = {"model": model, "messages": messages, "stream": True, **kwargs}
 
-        response_stream = self._client.stream("POST", url, headers=self._build_headers(), json=payload, timeout=self.timeout)
+        response_stream = self._client.stream(
+            "POST",
+            url,
+            headers=self._build_headers(),
+            json=payload,
+            timeout=self.timeout,
+        )
 
         return self._process_stream(response_stream)
 
@@ -95,10 +101,10 @@ class AsyncChatClient:
                         delta = choice.get("delta", {})
 
                         # 更新内容
-                        self.reasoning_content += delta["reasoning_content"] or ""
-                        self.content += delta["content"] or ""
+                        self.reasoning_content += delta.get("reasoning_content") or ""
+                        self.content += delta.get("content") or ""
 
                         yield self.reasoning_content + self.content
-                except json.JSONDecodeError:
-                    logger.error(f"Failed to parse stream chunk: {chunk}")
+                except json.JSONDecodeError as e:
+                    logger.opt(exception=e).error(f"Failed to parse stream chunk: {chunk}")
                     continue

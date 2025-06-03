@@ -32,7 +32,7 @@ async def url_to_base64(url: str) -> str:
             response = await client.get(url, timeout=30.0)
             response.raise_for_status()
         except httpx.HTTPError as e:
-            logger.error(f"获取图片失败: {url}, 错误: {e}")
+            logger.opt(exception=e).error(f"获取图片失败: {url}, 错误: {e}")
             raise
 
         image = PILImage.open(BytesIO(response.content))
@@ -97,5 +97,5 @@ async def process_image(image: Image) -> str | None:
             return client.content
 
     except Exception as e:
-        logger.error(f"图片处理失败: {e}")
+        logger.opt(exception=e).error(f"图片处理失败: {e}")
         return None
