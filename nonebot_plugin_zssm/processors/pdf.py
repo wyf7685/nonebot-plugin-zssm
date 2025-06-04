@@ -93,7 +93,7 @@ async def process_pdf(url: str) -> str | None:
             finally:
                 # 关闭文档并删除临时文件
                 if "doc" in locals():
-                    doc.close()
+                    doc.close() # type: ignore
 
     except Exception as e:
         logger.opt(exception=e).error(f"处理PDF失败: {url}, 错误: {e}")
