@@ -83,25 +83,20 @@ async def check_prompt_leakage(response: str, system_prompt: str) -> str:
                 logger.error("审查AI返回内容为空或格式错误")
                 return response
 
-            audit_content = audit_response["choices"][0]["message"]["content"]
+            audit_content: str = audit_response["choices"][0]["message"]["content"]
 
             try:
-                # 清理可能的markdown格式
-                markdown_pattern = r"^```\w*\s*|\s*```$"
-                audit_content = re.sub(markdown_pattern, "", audit_content.strip())
-
-                audit_result: dict[str, object] = json.loads(audit_content)
+                audit_result: dict[str, object] = json.loads(re.sub(r"^```\w*\s*|\s*```$", "", audit_content.strip()))
                 logger.info(f"审查结果: {audit_result}")
-
-                if audit_result.get("leaked", False):
-                    logger.warning("检测到system prompt泄露，已替换响应")
-                    return "（抱歉，我现在还不会这个）"
             except json.JSONDecodeError as e:
-                logger.error(f"审查结果JSON解析失败: {e}")
+                logger.error(f"审查结果 JSON 解析失败: {e}")
                 logger.debug(f"原始审查内容: {audit_content}")
                 return response
-            else:
-                return response
+
+            if audit_result.get("leaked", False):
+                logger.warning("检测到 system prompt 泄露，已替换响应")
+                return "（抱歉，我现在还不会这个）"
+            return response
 
     except Exception as e:
         logger.error(f"检查prompt泄露失败: {e}")
@@ -155,6 +150,6 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
             f"关键词：{' | '.join(keywords) if isinstance(keywords, list) else keywords}\n\n" if (keywords := llm_resp.keyword) else ""
         ) + output
 
-    except KeyError as e:
-        logger.error(f"缺少必要字段: {e}")
+    except Exception as e:
+        logger.error(f"生成AI响应失败: {e}")
         return None
