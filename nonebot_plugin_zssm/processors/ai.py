@@ -28,7 +28,7 @@ def extract_output_safe(data: str) -> LLMResponse | None:
         markdown_pattern = r"^```\w*\s*|\s*```$"
         data = re.sub(markdown_pattern, "", data.strip())
     except Exception as e:
-        logger.warning(f"清理Markdown格式失败: {e}")
+        logger.opt(exception=e).warning("清理Markdown格式失败")
 
     # 记录原始内容用于调试
     logger.debug(f"尝试解析JSON: {data}")
@@ -88,8 +88,8 @@ async def check_prompt_leakage(response: str, system_prompt: str) -> str:
             try:
                 audit_result: dict[str, object] = json.loads(re.sub(r"^```\w*\s*|\s*```$", "", audit_content.strip()))
                 logger.info(f"审查结果: {audit_result}")
-            except json.JSONDecodeError as e:
-                logger.error(f"审查结果 JSON 解析失败: {e}")
+            except json.JSONDecodeError:
+                logger.exception("审查结果JSON解析失败")
                 logger.debug(f"原始审查内容: {audit_content}")
                 return response
 
@@ -98,8 +98,8 @@ async def check_prompt_leakage(response: str, system_prompt: str) -> str:
                 return "（抱歉，我现在还不会这个）"
             return response
 
-    except Exception as e:
-        logger.error(f"检查prompt泄露失败: {e}")
+    except Exception:
+        logger.exception("检查prompt泄露失败")
         return response
 
 
@@ -151,5 +151,5 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
         ) + output
 
     except Exception as e:
-        logger.error(f"生成AI响应失败: {e}")
+        logger.opt(exception=e).error("生成AI响应失败")
         return None

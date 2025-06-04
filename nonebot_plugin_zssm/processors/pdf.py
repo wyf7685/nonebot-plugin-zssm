@@ -26,8 +26,8 @@ async def _download_pdf(url: str) -> AsyncGenerator[str | None]:
                         yield None
                         return
 
-        except httpx.HTTPError as e:
-            logger.error(f"下载PDF失败: {url}, 错误: {e}")
+        except httpx.HTTPError:
+            logger.exception(f"下载PDF失败: {url}")
             yield None
         else:
             temp.flush()
@@ -61,8 +61,8 @@ async def process_pdf(url: str) -> str | None:
                 # 提取文本
                 full_text = "\n".join(doc.load_page(page_num).get_textpage().extractText() for page_num in range(page_count))
 
-        except Exception as e:
-            logger.error(f"处理PDF失败: {url}, 错误: {e}")
+        except Exception:
+            logger.exception(f"处理PDF失败: {url}")
             return None
 
     # 如果文本太长，截取前N个字符

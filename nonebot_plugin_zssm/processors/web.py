@@ -33,14 +33,14 @@ async def process_web_page(url: str) -> str | None:
         async with await browser.new_page() as page:
             try:
                 await page.goto(url, timeout=60000)
-            except Exception as e:
-                logger.error(f"打开链接失败: {url}, 错误: {e}")
+            except Exception:
+                logger.exception(f"打开链接失败: {url}")
                 return None
 
             # 获取页面的内容
             page_content = await page.query_selector("html")
             return page_content and await page_content.inner_text()
 
-    except Exception as e:
-        logger.error(f"处理网页失败: {url}, 错误: {e}")
+    except Exception:
+        logger.exception(f"处理网页失败: {url}")
         return None

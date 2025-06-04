@@ -77,9 +77,6 @@ class AsyncChatClient:
             json=payload,
             timeout=self.timeout,
         ) as resp:
-            if resp.status_code != 200:
-                self._handle_error(resp)
-
             async for chunk in resp.aiter_lines():
                 if (data := self._parse_stream_chunk(chunk)) is None:
                     continue
