@@ -77,6 +77,10 @@ class AsyncChatClient:
             json=payload,
             timeout=self.timeout,
         ) as resp:
+            if resp.status_code != 200:
+                await resp.aread()
+                self._handle_error(resp)
+
             async for chunk in resp.aiter_lines():
                 if (data := self._parse_stream_chunk(chunk)) is None:
                     continue
@@ -107,7 +111,7 @@ class AsyncChatClient:
             error_data: dict = response.json()
             message = error_data.get("message", "Unknown error")
             code = error_data.get("code", response.status_code)
-        except json.JSONDecodeError:
+        except Exception:
             message = f"HTTP Error {response.status_code}"
             code = response.status_code
         raise APIError(message, code)

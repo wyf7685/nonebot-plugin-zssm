@@ -3,11 +3,10 @@ from importlib.metadata import version
 from nonebot import get_driver, require
 from nonebot.plugin import PluginMetadata, inherit_supported_adapters
 
+require("nonebot_plugin_alconna")
+from . import handle as handle
 from .browser import install_browser
 from .config import Config, plugin_config
-
-require("nonebot_plugin_alconna")
-
 
 try:
     __version__ = version("nonebot_plugin_zssm")
@@ -28,5 +27,3 @@ __plugin_meta__ = PluginMetadata(
 
 if plugin_config.browser.install_on_startup:
     get_driver().on_startup(install_browser)
-
-from . import handle  # noqa: E402, F401
