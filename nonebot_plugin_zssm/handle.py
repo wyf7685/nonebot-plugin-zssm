@@ -15,13 +15,12 @@ from nonebot_plugin_alconna.builtins.uniseg.market_face import MarketFace
 from nonebot_plugin_alconna.uniseg import Image, MsgId, Reference, UniMessage, message_reaction
 
 from .config import plugin_config
-from .constant import SYSTEM_PROMPT_RAW
+from .constant import construct_system_prompt
 from .processors.ai import generate_ai_response
 from .processors.image import process_image
 from .processors.pdf import process_pdf
 from .processors.web import process_web_page
 
-# 从文件加载系统提示词
 PATTERN_URL = re.compile(r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\b")
 PATTERN_PDF = re.compile(r"\b(?:https?):\/\/[^\s\/?#]+[^\s]*\.pdf\b")
 
@@ -108,7 +107,7 @@ async def process_url(url: str) -> str:
 async def construct_user_prompt(
     reply_content: Annotated[tuple[str, list[Image]], Depends(extract_reply_content)],
     param_content: Annotated[tuple[str, list[Image]], Depends(extract_param_content)],
-) -> str:
+) -> tuple[str, list[str]]:
     raw_input = prompt = reply_content[0] + param_content[0]
     image_list = reply_content[1] + param_content[1]
     if not prompt and not image_list:
@@ -121,8 +120,9 @@ async def construct_user_prompt(
     with contextlib.suppress(ActionFailed):
         await message_reaction("424")
 
-    async for image_content in process_images(image_list):
-        prompt += image_content
+    if not plugin_config.text.is_mllm:
+        async for image_content in process_images(image_list):
+            prompt += image_content
 
     # 处理URL和PDF
     if msg_urls := PATTERN_URL.findall(raw_input):
@@ -134,7 +134,7 @@ async def construct_user_prompt(
         with contextlib.suppress(ActionFailed):
             await message_reaction("314")
 
-    return prompt
+    return prompt, [image.url for image in image_list if image.url is not None]
 
 
 zssm = on_alconna(
@@ -154,14 +154,15 @@ async def check_config() -> None:
 async def handle(
     msg_id: MsgId,
     ext: ReplyRecordExtension,
-    user_prompt: Annotated[str, Depends(construct_user_prompt)],
+    user_prompt_data: Annotated[tuple[str, list[str]], Depends(construct_user_prompt)],
 ) -> None:
-    random_number = str(random.randint(10000000, 99999999))  # noqa: S311
-    system_prompt = SYSTEM_PROMPT_RAW + random_number
+    random_number = random.randint(10000000, 99999999)  # noqa: S311
+    system_prompt = construct_system_prompt(random_number, is_mllm=plugin_config.text.is_mllm)
+    user_prompt, image_urls = user_prompt_data
     user_prompt = f"<random number: {random_number}>\n{user_prompt}\n</random number: {random_number}>"
     logger.info("最终用户提示: \n" + user_prompt.replace("\n", "\\n"))
 
-    if (response := await generate_ai_response(system_prompt, user_prompt)) is None:
+    if (response := await generate_ai_response(system_prompt, user_prompt, image_urls)) is None:
         await UniMessage.text("AI 回复解析失败, 请重试").finish(reply_to=True)
 
     with contextlib.suppress(ActionFailed):

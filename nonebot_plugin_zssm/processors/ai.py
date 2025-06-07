@@ -1,9 +1,14 @@
+import base64
 import json
 import re
+import ssl
 import time
+from io import BytesIO
 
+import httpx
 from nonebot import logger
 from nonebot.compat import type_validate_json
+from PIL import Image as PILImage
 from pydantic import BaseModel
 
 from ..api import AsyncChatClient
@@ -47,20 +52,34 @@ def extract_output_safe(data: str) -> LLMResponse | None:
         return None
 
 
+async def url_to_base64(url: str) -> str:
+    ssl_context = ssl.create_default_context()
+    ssl_context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_3
+    ssl_context.set_ciphers("HIGH:!aNULL:!MD5")
+
+    async with httpx.AsyncClient(verify=ssl_context) as client:
+        try:
+            response = (await client.get(url, timeout=30.0)).raise_for_status()
+        except httpx.HTTPError as e:
+            logger.opt(exception=e).error(f"获取图片失败: {url}, 错误: {e}")
+            raise
+
+        image = PILImage.open(BytesIO(response.content))
+        # 把图片控制在5mb以内
+        if len(response.content) > 5 * 1024 * 1024:
+            image.thumbnail((4096, 4096))
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+
+        image.save(buffer := BytesIO(), format="JPEG", quality=80)
+        return f"data:image/jpeg;base64,{base64.b64encode(buffer.getvalue()).decode()}"
+
+
 def truncate_chunk(chunk: str) -> str:
     return f"{chunk[:20]}...{len(chunk) - 40}...{chunk[-20:]}" if len(chunk) > 60 else chunk
 
 
 async def check_prompt_leakage(response: str, system_prompt: str) -> str:
-    """检查AI响应是否泄露了system prompt
-
-    Args:
-        response: AI的响应内容
-        system_prompt: 原始系统提示词
-
-    Returns:
-        tuple[bool, str]: (是否泄露, 审查后的响应)
-    """
     if config_check is None:
         # 如果没有配置审查API Token，则跳过审查
         logger.warning("未配置审查API Token，跳过system prompt泄露检查")
@@ -103,18 +122,24 @@ async def check_prompt_leakage(response: str, system_prompt: str) -> str:
         return response
 
 
-async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | None:
-    """生成AI响应
-
-    Args:
-        system_prompt: 系统提示词
-        user_prompt: 用户提示词
-
-    Returns:
-        Optional[str]: AI生成的响应, 失败时返回None
-    """
+async def generate_ai_response(
+    system_prompt: str,
+    user_prompt: str,
+    image_urls: list[str] | None = None,
+) -> str | None:
     if not config.token:
         return None
+
+    user_content: list[dict[str, object]] = [{"type": "text", "text": user_prompt}]
+
+    if config.is_mllm and image_urls is not None:
+        for url in image_urls:
+            try:
+                encoded_image = await url_to_base64(url)
+            except Exception:
+                logger.exception(f"图片处理失败: {url}")
+                return None
+            user_content.append({"type": "image_url", "image_url": {"url": encoded_image}})
 
     try:
         last_time = time.time()
@@ -123,7 +148,7 @@ async def generate_ai_response(system_prompt: str, user_prompt: str) -> str | No
         async with AsyncChatClient(config) as client:
             async for chunk in client.stream_create(
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "user", "content": user_content},
             ):
                 i += 1
                 last_chunk = chunk

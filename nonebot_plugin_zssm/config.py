@@ -30,6 +30,10 @@ class LLMConfig(BaseModel):
         return v
 
 
+class TextLLMConfig(LLMConfig):
+    is_mllm: bool = False
+
+
 class BrowserConfig(BaseModel):
     proxy: str | None = None
     type: Literal["chromium", "firefox", "webkit"] = "chromium"
@@ -43,7 +47,7 @@ class PdfConfig(BaseModel):
 
 
 class PluginConfig(BaseModel):
-    text: LLMConfig
+    text: TextLLMConfig
     vl: LLMConfig
     check: LLMConfig | None = None
     browser: BrowserConfig = BrowserConfig()
