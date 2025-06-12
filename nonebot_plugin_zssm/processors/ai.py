@@ -1,19 +1,15 @@
-import base64
 import json
 import re
-import ssl
 import time
-from io import BytesIO
 
-import httpx
 from nonebot import logger
 from nonebot.compat import type_validate_json
-from PIL import Image as PILImage
 from pydantic import BaseModel
 
 from ..api import AsyncChatClient
 from ..config import plugin_config
 from ..constant import AUDIT_SYSTEM_PROMPT, AUDIT_USER_PROMPT
+from .image import url_to_base64
 
 config = plugin_config.text
 config_check = plugin_config.check
@@ -50,29 +46,6 @@ def extract_output_safe(data: str) -> LLMResponse | None:
     except ValueError:
         logger.exception(f"LLM 响应解析失败: {data}")
         return None
-
-
-async def url_to_base64(url: str) -> str:
-    ssl_context = ssl.create_default_context()
-    ssl_context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_3
-    ssl_context.set_ciphers("HIGH:!aNULL:!MD5")
-
-    async with httpx.AsyncClient(verify=ssl_context) as client:
-        try:
-            response = (await client.get(url, timeout=30.0)).raise_for_status()
-        except httpx.HTTPError as e:
-            logger.opt(exception=e).error(f"获取图片失败: {url}, 错误: {e}")
-            raise
-
-        image = PILImage.open(BytesIO(response.content))
-        # 把图片控制在5mb以内
-        if len(response.content) > 5 * 1024 * 1024:
-            image.thumbnail((4096, 4096))
-        if image.mode != "RGB":
-            image = image.convert("RGB")
-
-        image.save(buffer := BytesIO(), format="JPEG", quality=80)
-        return f"data:image/jpeg;base64,{base64.b64encode(buffer.getvalue()).decode()}"
 
 
 def truncate_chunk(chunk: str) -> str:
