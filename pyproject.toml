@@ -103,6 +103,7 @@ ignore = [
     "ISC001",  # format warning
     "RUF001",
     "E402",
+    "PLC",
 ]
 flake8-quotes = { inline-quotes = "double", multiline-quotes = "double" }
 
