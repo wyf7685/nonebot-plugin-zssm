@@ -2,10 +2,9 @@ import asyncio
 import os
 import re
 import sys
-from pathlib import Path
 
 from nonebot import logger
-from playwright._impl._driver import compute_driver_executable, get_driver_env
+from playwright._impl._driver import compute_driver_executable, get_driver_env  # pyright:ignore[reportPrivateImportUsage]
 
 from ..config import plugin_config
 
@@ -49,11 +48,8 @@ async def install_browser(
     if download_host:
         env["PLAYWRIGHT_DOWNLOAD_HOST"] = download_host
 
-    cde_raw = compute_driver_executable()
-    cde = [cde_raw.as_posix()] if isinstance(cde_raw, Path) else list(cde_raw)
-
     command = [
-        *cde,
+        *compute_driver_executable(),
         "install",
         "--with-deps",
         browser_type,
