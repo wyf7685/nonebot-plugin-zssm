@@ -8,7 +8,7 @@ readme = "README.md"
 license = { text = "MIT" }
 dependencies = [
     "nonebot2>=2.4.1",
-    "nonebot-plugin-alconna>=0.57.3",
+    "nonebot-plugin-alconna>=0.59.0",
     "httpx>=0.28.1",
     "playwright>=1.51.0",
     "pillow>=11.0.0",
@@ -19,7 +19,7 @@ dependencies = [
 dev = [
     "nonebot2[fastapi]>=2.4.1",
     "nonebot-adapter-onebot>=2.4.6",
-    "ruff~=0.11",
+    "ruff~=0.12",
     "pre-commit~=4.1",
 ]
 
@@ -87,7 +87,7 @@ ignore = [
     "PLR0913", # 参数就那么多的，你用 builder 什么的不是更逆天？
     "SIM108",  # 迫真 simplicy
     "RUF009",  # 我不想要额外的全局变量。
-    "UP038",   # instance(..., X | Y) 还是太超前了
+    # "UP038",   # instance(..., X | Y) 还是太超前了
     "RUF003",  # 中文注释里用全角符号怎么你了
     "SLOT000", # 动态类型需求，主要是 json5 backend
     "PLR0911",

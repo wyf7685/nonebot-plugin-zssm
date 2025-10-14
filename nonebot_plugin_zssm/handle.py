@@ -50,7 +50,7 @@ async def extract_reply_content(event: Event, msg_id: MsgId, ext: ReplyRecordExt
     if isinstance(raw, str):
         raw = event.get_message().__class__(raw)
 
-    msg = UniMessage.generate_sync(message=raw)
+    msg = UniMessage.of(message=raw)
     display = await display_unimsg(msg)
     return f"<type: interest>\n{display}\n</type: interest>", msg[Image]
 
