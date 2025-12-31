@@ -1,4 +1,4 @@
-from nonebot import logger
+from nonebot import logger, require
 from playwright.async_api import Browser, BrowserType, Error, Playwright, async_playwright
 
 from ..config import plugin_config
@@ -9,6 +9,15 @@ _playwright: Playwright | None = None
 
 
 async def init(**kwargs) -> Browser:
+    if plugin_config.browser.use_htmlrender:
+        try:
+            require("nonebot_plugin_htmlrender")
+            from nonebot_plugin_htmlrender import get_browser
+
+            return await get_browser(**kwargs)
+        except Exception as e:
+            logger.warning(f"无法使用 nonebot_plugin_htmlrender 提供浏览器支持: {e!r}")
+
     global _browser, _playwright  # noqa: PLW0603
 
     if _playwright is None:

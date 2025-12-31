@@ -1,14 +1,12 @@
 import contextlib
 import random
 import re
-from typing import Annotated
 
 import httpx
 from arclet.alconna import AllParam
 from nonebot import logger
 from nonebot.exception import ActionFailed
 from nonebot.internal.adapter import Event
-from nonebot.params import Depends
 from nonebot_plugin_alconna import Alconna, Args, Match, on_alconna
 from nonebot_plugin_alconna.builtins.extensions.reply import ReplyRecordExtension
 from nonebot_plugin_alconna.builtins.uniseg.market_face import MarketFace
@@ -105,11 +103,16 @@ async def process_url(url: str) -> str:
 
 
 async def construct_user_prompt(
-    reply_content: Annotated[tuple[str, list[Image]], Depends(extract_reply_content)],
-    param_content: Annotated[tuple[str, list[Image]], Depends(extract_param_content)],
+    event: Event,
+    msg_id: MsgId,
+    ext: ReplyRecordExtension,
+    content: Match[UniMessage],
 ) -> tuple[str, list[str]]:
-    raw_input = prompt = reply_content[0] + param_content[0]
-    image_list = reply_content[1] + param_content[1]
+    reply_text, reply_images = await extract_reply_content(event, msg_id, ext)
+    param_text, param_images = await extract_param_content(content)
+
+    raw_input = prompt = reply_text + param_text
+    image_list = reply_images + param_images
     if not prompt and not image_list:
         await UniMessage.text("请回复或输入内容").finish(reply_to=True)
 
@@ -152,13 +155,14 @@ async def check_config() -> None:
 
 @zssm.handle()
 async def handle(
+    event: Event,
     msg_id: MsgId,
     ext: ReplyRecordExtension,
-    user_prompt_data: Annotated[tuple[str, list[str]], Depends(construct_user_prompt)],
+    content: Match[UniMessage],
 ) -> None:
     random_number = random.randint(10000000, 99999999)  # noqa: S311
     system_prompt = construct_system_prompt(random_number, is_mllm=plugin_config.text.is_mllm)
-    user_prompt, image_urls = user_prompt_data
+    user_prompt, image_urls = await construct_user_prompt(event, msg_id, ext, content)
     user_prompt = f"<random number: {random_number}>\n{user_prompt}\n</random number: {random_number}>"
     logger.info("最终用户提示: \n" + user_prompt.replace("\n", "\\n"))
 

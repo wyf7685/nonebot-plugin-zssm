@@ -38,6 +38,7 @@ class BrowserConfig(BaseModel):
     proxy: str | None = None
     type: Literal["chromium", "firefox", "webkit"] = "chromium"
     install_on_startup: bool = True
+    use_htmlrender: bool = False
 
 
 class PdfConfig(BaseModel):
